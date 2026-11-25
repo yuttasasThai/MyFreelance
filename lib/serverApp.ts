@@ -19,7 +19,11 @@ const ADMIN_CRED_FILE = path.join(DATA_DIR, 'admin.json');
 const REVISION_STATE_FILE = path.join(DATA_DIR, 'revision-state.json');
 const ROOT_REVISION_FILE = path.join(ROOT_DIR, 'revision.json');
 
-const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const SESSION_SECRET =
+  process.env.SESSION_SECRET ||
+  (process.env.ADMIN_PASSCODE
+    ? crypto.createHmac('sha256', process.env.ADMIN_PASSCODE).update('my-freelance-session-v1').digest('hex')
+    : crypto.randomBytes(32).toString('hex'));
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 
 export interface ServerTeamRecord {
