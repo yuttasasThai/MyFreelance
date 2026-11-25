@@ -29,6 +29,9 @@ export default function App() {
     (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim()
   );
   const [isLoadingMapsConfig, setIsLoadingMapsConfig] = useState(false);
+  const [hasFetchedMapsConfig, setHasFetchedMapsConfig] = useState(
+    Boolean((import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim())
+  );
   const [quotaExceeded, setQuotaExceeded] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -73,13 +76,12 @@ export default function App() {
       });
       if (r.ok) {
         const data = (await r.json()) as { apiKey?: string };
-        if (data?.apiKey) {
-          setMapsApiKey(data.apiKey.trim());
-        }
+        setMapsApiKey((data?.apiKey || '').trim());
       }
     } catch {
       // Ignore config fetch error
     } finally {
+      setHasFetchedMapsConfig(true);
       setIsLoadingMapsConfig(false);
     }
   }, []);
@@ -130,14 +132,24 @@ export default function App() {
     } else {
       setRecords([]);
       setCurrentPage('home');
+      if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
+        setMapsApiKey('');
+        setHasFetchedMapsConfig(false);
+      }
     }
   }, [adminToken, loadAdminData]);
 
   useEffect(() => {
-    if (adminToken && currentPage === 'map' && !mapsApiKey && !isLoadingMapsConfig) {
+    if (
+      adminToken &&
+      currentPage === 'map' &&
+      !mapsApiKey &&
+      !isLoadingMapsConfig &&
+      !hasFetchedMapsConfig
+    ) {
       void fetchMapsConfig(adminToken);
     }
-  }, [adminToken, currentPage, mapsApiKey, isLoadingMapsConfig, fetchMapsConfig]);
+  }, [adminToken, currentPage, mapsApiKey, isLoadingMapsConfig, hasFetchedMapsConfig, fetchMapsConfig]);
 
   useEffect(() => {
     if (!toastMessage) return;
