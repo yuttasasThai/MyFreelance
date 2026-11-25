@@ -8,9 +8,10 @@ import {
   useApiLoadingStatus,
   useMap,
 } from '@vis.gl/react-google-maps';
-import { MapPin, Layers, Wrench, ShoppingBag } from 'lucide-react';
+import { MapPin, Layers, Wrench, ShoppingBag, Map as MapIcon, Building2 } from 'lucide-react';
 import type { AreaGroup, TeamRecord, WorkType } from '../types.ts';
-import { THAILAND_PROVINCES, normalizeProvinceName } from '../data/thailandProvinces.ts';
+import { THAILAND_PROVINCES, normalizeProvinceName, resolveThailandCoords } from '../data/thailandProvinces.ts';
+import { SimpleThailandMap } from './SimpleThailandMap.tsx';
 
 interface SummaryMapPageProps {
   records: TeamRecord[];
@@ -19,7 +20,8 @@ interface SummaryMapPageProps {
   onRetryApiKey?: () => void;
 }
 
-type GroupingLevel = 'area' | 'province';
+type GroupingLevel = 'subdistrict' | 'district' | 'province';
+type MapEngineMode = 'simple2d' | 'google';
 type MarkerAnchor = ComponentProps<typeof InfoWindow>['anchor'];
 
 const THAILAND_CENTER = { lat: 13.7563, lng: 100.5018 };
@@ -99,21 +101,28 @@ export function SummaryMapPage({
   records,
   apiKey,
   isLoadingApiKey = false,
-  onRetryApiKey,
 }: SummaryMapPageProps) {
   const [filterType, setFilterType] = useState<'all' | WorkType>('all');
-  const [groupingLevel, setGroupingLevel] = useState<GroupingLevel>('area');
+  const [groupingLevel, setGroupingLevel] = useState<GroupingLevel>('subdistrict');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [activeMarker, setActiveMarker] = useState<MarkerAnchor>(null);
   const [mapLoadError, setMapLoadError] = useState(false);
+  const [preferredMode, setPreferredMode] = useState<MapEngineMode>('google');
+
   const handleMapLoadError = useCallback(() => {
     setMapLoadError(true);
   }, []);
+
   const [cameraTarget, setCameraTarget] = useState<{
     lat: number;
     lng: number;
     zoom: number;
+    seq: number;
   } | null>(null);
+
+  const canUseGoogleMaps = Boolean(apiKey) && !mapLoadError && !isLoadingApiKey;
+  const activeEngine: MapEngineMode =
+    canUseGoogleMaps && preferredMode === 'google' ? 'google' : 'simple2d';
 
   const filteredRecords = useMemo(() => {
     if (filterType === 'all') return records;
@@ -125,28 +134,44 @@ export function SummaryMapPage({
 
     for (const rec of filteredRecords) {
       const normProv = normalizeProvinceName(rec.province);
-      const key =
-        groupingLevel === 'province'
-          ? normProv
-          : `${rec.subdistrict.trim()}|${rec.district.trim()}|${normProv}`;
+      const cleanDist = rec.district.trim();
+      const cleanSub = rec.subdistrict.trim();
+
+      let key: string;
+      let label: string;
+      let subLabel: string;
+      let coords: { lat: number; lng: number };
+
+      if (groupingLevel === 'province') {
+        key = normProv;
+        label = normProv;
+        subLabel = 'สรุประดับจังหวัด';
+        const provMatch = THAILAND_PROVINCES.find((p) => p.name === normProv);
+        coords = provMatch
+          ? { lat: provMatch.lat, lng: provMatch.lng }
+          : { lat: rec.lat, lng: rec.lng };
+      } else if (groupingLevel === 'district') {
+        key = `${cleanDist}|${normProv}`;
+        label = `อ.${cleanDist}`;
+        subLabel = `จ.${normProv}`;
+        coords = resolveThailandCoords('', cleanDist, normProv);
+      } else {
+        key = `${cleanSub}|${cleanDist}|${normProv}`;
+        label = `ต.${cleanSub}`;
+        subLabel = `อ.${cleanDist} จ.${normProv}`;
+        coords = { lat: rec.lat, lng: rec.lng };
+      }
 
       if (!groups[key]) {
-        const provMatch = THAILAND_PROVINCES.find((p) => p.name === normProv);
-        const lat = groupingLevel === 'province' && provMatch ? provMatch.lat : rec.lat;
-        const lng = groupingLevel === 'province' && provMatch ? provMatch.lng : rec.lng;
-
         groups[key] = {
           key,
-          label:
-            groupingLevel === 'province'
-              ? normProv
-              : `ต.${rec.subdistrict} อ.${rec.district}`,
-          subLabel: groupingLevel === 'province' ? 'สรุประดับจังหวัด' : `จ.${normProv}`,
+          label,
+          subLabel,
           province: normProv,
-          district: groupingLevel === 'area' ? rec.district : undefined,
-          subdistrict: groupingLevel === 'area' ? rec.subdistrict : undefined,
-          lat,
-          lng,
+          district: groupingLevel !== 'province' ? cleanDist : undefined,
+          subdistrict: groupingLevel === 'subdistrict' ? cleanSub : undefined,
+          lat: coords.lat,
+          lng: coords.lng,
           totalCount: 0,
           assemblyCount: 0,
           salesCount: 0,
@@ -179,15 +204,19 @@ export function SummaryMapPage({
     []
   );
 
-  const handleSelectFromList = useCallback((group: AreaGroup) => {
-    setSelectedKey(group.key);
-    setActiveMarker(null);
-    setCameraTarget({
-      lat: group.lat,
-      lng: group.lng,
-      zoom: groupingLevel === 'province' ? 9 : 12,
-    });
-  }, [groupingLevel]);
+  const handleSelectFromList = useCallback(
+    (group: AreaGroup) => {
+      setSelectedKey(group.key);
+      setActiveMarker(null);
+      setCameraTarget((prev) => ({
+        lat: group.lat,
+        lng: group.lng,
+        zoom: groupingLevel === 'province' ? 8 : groupingLevel === 'district' ? 10 : 12,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+    },
+    [groupingLevel]
+  );
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
@@ -203,7 +232,7 @@ export function SummaryMapPage({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Work Type Filter */}
           <div className="inline-flex items-center gap-1 rounded-lg bg-slate-200/70 p-1">
             <button
@@ -250,23 +279,39 @@ export function SummaryMapPage({
             </button>
           </div>
 
-          {/* Grouping Mode Switch */}
+          {/* Grouping Mode Switch: ตำบล / อำเภอ / จังหวัด */}
           <div className="inline-flex items-center gap-1 rounded-lg bg-slate-200/70 p-1">
             <button
               type="button"
               onClick={() => {
-                setGroupingLevel('area');
+                setGroupingLevel('subdistrict');
                 setSelectedKey(null);
                 setActiveMarker(null);
               }}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
-                groupingLevel === 'area'
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
+                groupingLevel === 'subdistrict'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Layers className="h-3.5 w-3.5" />
-              <span>ตามตำบล / อำเภอ</span>
+              <span>ตามตำบล</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setGroupingLevel('district');
+                setSelectedKey(null);
+                setActiveMarker(null);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
+                groupingLevel === 'district'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Building2 className="h-3.5 w-3.5" />
+              <span>ตามอำเภอ</span>
             </button>
             <button
               type="button"
@@ -275,7 +320,7 @@ export function SummaryMapPage({
                 setSelectedKey(null);
                 setActiveMarker(null);
               }}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
                 groupingLevel === 'province'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -285,53 +330,55 @@ export function SummaryMapPage({
               <span>ตามจังหวัด</span>
             </button>
           </div>
+
+          {/* Optional Engine Switch when Google Maps API Key is present */}
+          {canUseGoogleMaps && (
+            <div className="inline-flex items-center gap-1 rounded-lg bg-slate-200/70 p-1">
+              <button
+                type="button"
+                onClick={() => setPreferredMode('simple2d')}
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
+                  activeEngine === 'simple2d'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <MapIcon className="h-3.5 w-3.5" />
+                <span>แผนที่ 2D</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreferredMode('google')}
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
+                  activeEngine === 'google'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                <span>Google Maps</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Main 2-Column Split: Map + Area Summary Ranking */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-stretch">
-        {/* Google Map Viewport (8 cols) */}
+        {/* Map Viewport (8 cols) */}
         <div className="lg:col-span-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-          {!apiKey ? (
-            <div className="flex h-[280px] sm:h-[420px] flex-col items-center justify-center bg-slate-50 p-6 text-center">
-              <MapPin className="h-10 w-10 text-slate-400" />
-              <p className="mt-3 text-sm font-semibold text-slate-800">
-                {isLoadingApiKey ? 'กำลังโหลด Google Maps API Key...' : 'ยังไม่ได้ตั้งค่า Google Maps API Key'}
-              </p>
-              <p className="mt-1.5 max-w-md text-xs leading-relaxed text-slate-500">
-                {isLoadingApiKey
-                  ? 'กรุณารอสักครู่ ระบบกำลังเชื่อมต่อกับแผนที่'
-                  : 'หากเปิดใช้งานบน Vercel กรุณาเพิ่มตัวแปร VITE_GOOGLE_MAPS_API_KEY ใน Vercel Project Settings -> Environment Variables แล้ว Redeploy'}
-              </p>
-              {!isLoadingApiKey && onRetryApiKey && (
-                <button
-                  type="button"
-                  onClick={onRetryApiKey}
-                  className="mt-4 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-100 cursor-pointer"
-                >
-                  ลองโหลดแผนที่อีกครั้ง
-                </button>
-              )}
-            </div>
-          ) : mapLoadError ? (
-            <div className="flex h-[320px] sm:h-[460px] flex-col items-center justify-center bg-slate-50 p-6 text-center">
-              <MapPin className="h-10 w-10 text-amber-500" />
-              <p className="mt-3 text-sm font-semibold text-slate-800">
-                ไม่สามารถโหลด Google Maps ได้
-              </p>
-              <p className="mt-1.5 max-w-md text-xs leading-relaxed text-slate-500">
-                กรุณาตรวจสอบว่า Google Maps API Key เปิดใช้งาน Maps JavaScript API และอนุญาตโดเมนเว็บไซต์นี้ใน HTTP Referrers แล้ว
-              </p>
-              <button
-                type="button"
-                onClick={() => setMapLoadError(false)}
-                className="mt-4 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-100 cursor-pointer"
-              >
-                โหลดแผนที่ใหม่
-              </button>
-            </div>
+          {activeEngine === 'simple2d' ? (
+            <SimpleThailandMap
+              areaGroups={areaGroups}
+              selectedKey={selectedKey}
+              onSelectGroup={(group) => {
+                setSelectedKey(group ? group.key : null);
+                setActiveMarker(null);
+              }}
+              focusTarget={cameraTarget}
+            />
           ) : (
-            <div className="relative h-[440px] w-full sm:h-[540px] lg:h-[620px]">
+            <div className="relative h-[460px] w-full sm:h-[540px] lg:h-[620px]">
               <APIProvider
                 apiKey={apiKey}
                 language="th"

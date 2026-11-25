@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   Download,
   FileSpreadsheet,
@@ -9,8 +9,10 @@ import {
   X,
   RotateCcw,
   AlertTriangle,
+  Upload,
+  Database,
 } from 'lucide-react';
-import type { TeamRecord, WorkType } from '../types.ts';
+import type { StorageMode, TeamRecord, WorkType } from '../types.ts';
 import { exportRecordsToCsv, exportRecordsToExcel } from '../utils/excelExport.ts';
 
 interface ExcelDatabasePageProps {
@@ -20,10 +22,12 @@ interface ExcelDatabasePageProps {
   isClearingRecords: boolean;
   sourceRevision: number;
   dataRevision: number;
+  storageMode: StorageMode;
   onAddNew: (workType: WorkType) => void;
   onUpdateRecord: (id: string, patch: Partial<TeamRecord>) => Promise<void>;
   onDeleteRecord: (id: string) => Promise<void>;
   onClearAllRecords: () => Promise<void>;
+  onImportRecords: (incoming: unknown[]) => Promise<void>;
   onDownloadSource: () => void;
 }
 
@@ -47,10 +51,12 @@ export function ExcelDatabasePage({
   isClearingRecords,
   sourceRevision,
   dataRevision,
+  storageMode,
   onAddNew,
   onUpdateRecord,
   onDeleteRecord,
   onClearAllRecords,
+  onImportRecords,
   onDownloadSource,
 }: ExcelDatabasePageProps) {
   const [filterType, setFilterType] = useState<'all' | WorkType>('all');
@@ -68,6 +74,8 @@ export function ExcelDatabasePage({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const filteredRecords = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -148,6 +156,42 @@ export function ExcelDatabasePage({
     }
   };
 
+  const handleExportJsonBackup = () => {
+    const payload = JSON.stringify(records, null, 2);
+    const blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `my-freelance-backup-${new Date().toISOString().slice(0, 10)}-rev${dataRevision}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const list = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === 'object' && Array.isArray(parsed.records)
+        ? parsed.records
+        : null;
+      if (list) {
+        await onImportRecords(list);
+      }
+    } catch {
+      // Ignore malformed JSON
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       {/* Page Title & Primary Excel Actions */}
@@ -158,7 +202,7 @@ export function ExcelDatabasePage({
             ฐานข้อมูลตาราง Excel
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            คลิกที่ช่องข้อมูลเพื่อแก้ไขได้ทันที บันทึกเป็นไฟล์ Excel (.xlsx) หรือล้างข้อมูลเก่าเพื่อเริ่มต้นใหม่
+            ข้อมูลจะถูกสะสมเก็บไว้ต่อเนื่องจนกว่า Admin จะลบเอง สามารถคลิกแก้ไขหรือส่งออกเป็น Excel (.xlsx) ได้ตลอดเวลา
           </p>
         </div>
 
@@ -208,6 +252,35 @@ export function ExcelDatabasePage({
 
           <button
             type="button"
+            onClick={handleExportJsonBackup}
+            disabled={records.length === 0}
+            title="ดาวน์โหลดไฟล์สำรอง JSON"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 whitespace-nowrap hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+          >
+            <Database className="h-4 w-4" />
+            <span>สำรอง JSON</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            title="นำเข้าข้อมูลจากไฟล์สำรอง JSON เพิ่มเติมโดยไม่ลบข้อมูลเก่า"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 whitespace-nowrap hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+          >
+            <Upload className="h-4 w-4" />
+            <span>{isImporting ? 'กำลังนำเข้า...' : 'นำเข้าเพิ่ม'}</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={(e) => void handleImportFileChange(e)}
+            className="hidden"
+          />
+
+          <button
+            type="button"
             onClick={() => void exportRecordsToExcel(filteredRecords, dataRevision)}
             disabled={filteredRecords.length === 0}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white whitespace-nowrap shadow-xs hover:bg-emerald-800 disabled:opacity-40 cursor-pointer tabular-nums"
@@ -217,6 +290,13 @@ export function ExcelDatabasePage({
           </button>
         </div>
       </div>
+
+      {storageMode === 'vercel-tmp' && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900">
+          <strong>หมายเหตุสำหรับ Vercel:</strong> ขณะนี้ระบบกำลังจัดเก็บในหน่วยความจำชั่วคราว (/tmp) ของ Vercel ซึ่งอาจรีเซ็ตเมื่อเซิร์ฟเวอร์หยุดทำงานชั่วคราว
+          หากต้องการให้ข้อมูลสะสมถาวร 100% บน Vercel กรุณาเพิ่มฐานข้อมูล <strong>Upstash Redis (ฟรี)</strong> ในหน้า Vercel Dashboard &rarr; Storage แล้ว Redeploy (หรือกดปุ่ม &ldquo;สำรอง JSON&rdquo; / &ldquo;นำเข้าเพิ่ม&rdquo; เพื่อรวมข้อมูลเก่าได้ตลอดเวลา)
+        </div>
+      )}
 
       {/* Filter & Search Toolbar */}
       <div className="mt-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
