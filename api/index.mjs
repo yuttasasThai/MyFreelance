@@ -457,7 +457,7 @@ function createApiApp() {
   const app2 = express();
   app2.use(express.json());
   app2.get("/api/maps-config", requireAdmin, (_req, res) => {
-    const apiKey = process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "";
+    const apiKey = (process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.MAPS_API_KEY || "").trim();
     res.json({ apiKey });
   });
   app2.get("/api/revision", (_req, res) => {
