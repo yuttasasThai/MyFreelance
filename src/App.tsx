@@ -26,8 +26,9 @@ export default function App() {
   const [isDownloadingSource, setIsDownloadingSource] = useState(false);
   const [isClearingRecords, setIsClearingRecords] = useState(false);
   const [mapsApiKey, setMapsApiKey] = useState<string>(
-    import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+    (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim()
   );
+  const [isLoadingMapsConfig, setIsLoadingMapsConfig] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -64,63 +65,79 @@ export default function App() {
     };
   }, []);
 
-  const loadAdminData = useCallback(async (token: string) => {
-    setIsLoading(true);
+  const fetchMapsConfig = useCallback(async (token: string) => {
+    setIsLoadingMapsConfig(true);
     try {
-      const res = await fetch('/api/records', {
+      const r = await fetch('/api/maps-config', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.status === 401) {
-        setAdminToken(null);
-        setCurrentPage('home');
-        return;
-      }
-      if (res.ok) {
-        const data = (await res.json()) as {
-          records?: TeamRecord[];
-          sourceRevision?: number;
-          dataRevision?: number;
-        };
-        if (Array.isArray(data.records)) {
-          setRecords(data.records);
-        }
-        if (typeof data.sourceRevision === 'number') {
-          setSourceRevision(data.sourceRevision);
-        }
-        if (typeof data.dataRevision === 'number') {
-          setDataRevision(data.dataRevision);
+      if (r.ok) {
+        const data = (await r.json()) as { apiKey?: string };
+        if (data?.apiKey) {
+          setMapsApiKey(data.apiKey.trim());
         }
       }
+    } catch {
+      // Ignore config fetch error
     } finally {
-      setIsLoading(false);
-    }
-
-    if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
-      fetch('/api/maps-config', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data: { apiKey?: string } | null) => {
-          if (data?.apiKey) {
-            setMapsApiKey(data.apiKey);
-          }
-        })
-        .catch(() => {
-          // Ignore config fetch error
-        });
+      setIsLoadingMapsConfig(false);
     }
   }, []);
+
+  const loadAdminData = useCallback(
+    async (token: string) => {
+      setIsLoading(true);
+      try {
+        const recordsPromise = fetch('/api/records', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const mapsPromise = !import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+          ? fetchMapsConfig(token)
+          : Promise.resolve();
+
+        const [res] = await Promise.all([recordsPromise, mapsPromise]);
+        if (res.status === 401) {
+          setAdminToken(null);
+          setCurrentPage('home');
+          return;
+        }
+        if (res.ok) {
+          const data = (await res.json()) as {
+            records?: TeamRecord[];
+            sourceRevision?: number;
+            dataRevision?: number;
+          };
+          if (Array.isArray(data.records)) {
+            setRecords(data.records);
+          }
+          if (typeof data.sourceRevision === 'number') {
+            setSourceRevision(data.sourceRevision);
+          }
+          if (typeof data.dataRevision === 'number') {
+            setDataRevision(data.dataRevision);
+          }
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [fetchMapsConfig]
+  );
 
   useEffect(() => {
     if (adminToken) {
       void loadAdminData(adminToken);
     } else {
       setRecords([]);
-      if (currentPage !== 'home') {
-        setCurrentPage('home');
-      }
+      setCurrentPage('home');
     }
-  }, [adminToken, currentPage, loadAdminData]);
+  }, [adminToken, loadAdminData]);
+
+  useEffect(() => {
+    if (adminToken && currentPage === 'map' && !mapsApiKey && !isLoadingMapsConfig) {
+      void fetchMapsConfig(adminToken);
+    }
+  }, [adminToken, currentPage, mapsApiKey, isLoadingMapsConfig, fetchMapsConfig]);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -383,7 +400,16 @@ export default function App() {
       )}
 
       {isAdmin && currentPage === 'map' && (
-        <SummaryMapPage records={records} apiKey={mapsApiKey} />
+        <SummaryMapPage
+          records={records}
+          apiKey={mapsApiKey}
+          isLoadingApiKey={isLoadingMapsConfig}
+          onRetryApiKey={() => {
+            if (adminToken) {
+              void fetchMapsConfig(adminToken);
+            }
+          }}
+        />
       )}
 
       <RegistrationModal
