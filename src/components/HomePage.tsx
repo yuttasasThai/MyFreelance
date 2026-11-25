@@ -45,45 +45,45 @@ export function HomePage({
             <div className="absolute h-44 w-44 rounded-full border border-dashed border-slate-200 sm:h-56 sm:w-56" />
           </div>
 
-          <div className="relative z-10 flex flex-row items-center justify-center gap-4 sm:gap-12">
-            {/* 1) 3D Circular Button: งานประกอบสินค้า (ประแจขันไฮบริดอินเวอร์เตอร์) */}
+          <div className="relative z-10 flex flex-row items-center justify-center gap-3.5 sm:gap-10">
+            {/* 1) 3D Circular Button: งานประกอบสินค้า (Hybrid Inverter + ไขควงจิ้มลง) */}
             <button
               type="button"
               onClick={() => onSelectWorkType('assembly')}
-              className="orb-3d-assembly group relative flex h-40 w-40 flex-col items-center justify-center rounded-full p-3 text-center text-white cursor-pointer focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-blue-600 sm:h-52 sm:w-52 sm:p-5"
+              className="orb-3d-assembly group relative flex h-[156px] w-[156px] flex-col items-center justify-center rounded-full p-2.5 text-center text-white cursor-pointer focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-orange-500 sm:h-54 sm:w-54 sm:p-5"
             >
               <span
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-2 rounded-full border border-white/25 sm:inset-2.5"
               />
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/15 shadow-inner transition-transform duration-150 group-hover:scale-105 sm:h-16 sm:w-16">
-                <InverterWrenchIcon className="h-10 w-10 text-white sm:h-12 sm:w-12" />
+              <div className="flex h-[74px] w-[74px] items-center justify-center rounded-full bg-white shadow-md ring-2 ring-orange-300/80 transition-transform duration-150 group-hover:scale-105 sm:h-24 sm:w-24">
+                <InverterWrenchIcon className="h-14 w-14 sm:h-[68px] sm:w-[68px]" />
               </div>
-              <span className="mt-2.5 text-sm font-bold tracking-tight sm:mt-3 sm:text-base">
+              <span className="mt-2 text-[13px] font-bold leading-tight tracking-tight sm:mt-3 sm:text-base">
                 งานประกอบสินค้า
               </span>
-              <span className="mt-0.5 text-[11px] text-blue-100/90 sm:text-xs">
+              <span className="mt-0.5 text-[10px] text-blue-100/95 sm:text-xs">
                 กดกรอกข้อมูล
               </span>
             </button>
 
-            {/* 2) 3D Circular Button: งานขายสินค้า (รถเข็นมีแผงโซลาร์เซลล์) */}
+            {/* 2) 3D Circular Button: งานขายสินค้า (รถเข็นมีอุปกรณ์โซลาร์เซลล์) */}
             <button
               type="button"
               onClick={() => onSelectWorkType('sales')}
-              className="orb-3d-sales group relative flex h-40 w-40 flex-col items-center justify-center rounded-full p-3 text-center text-white cursor-pointer focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 sm:h-52 sm:w-52 sm:p-5"
+              className="orb-3d-sales group relative flex h-[156px] w-[156px] flex-col items-center justify-center rounded-full p-2.5 text-center text-white cursor-pointer focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-orange-500 sm:h-54 sm:w-54 sm:p-5"
             >
               <span
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-2 rounded-full border border-white/25 sm:inset-2.5"
               />
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/15 shadow-inner transition-transform duration-150 group-hover:scale-105 sm:h-16 sm:w-16">
-                <SolarCartIcon className="h-10 w-10 text-white sm:h-12 sm:w-12" />
+              <div className="flex h-[74px] w-[74px] items-center justify-center rounded-full bg-white shadow-md ring-2 ring-orange-300/80 transition-transform duration-150 group-hover:scale-105 sm:h-24 sm:w-24">
+                <SolarCartIcon className="h-14 w-14 sm:h-[68px] sm:w-[68px]" />
               </div>
-              <span className="mt-2.5 text-sm font-bold tracking-tight sm:mt-3 sm:text-base">
+              <span className="mt-2 text-[13px] font-bold leading-tight tracking-tight sm:mt-3 sm:text-base">
                 งานขายสินค้า
               </span>
-              <span className="mt-0.5 text-[11px] text-emerald-100/90 sm:text-xs">
+              <span className="mt-0.5 text-[10px] text-emerald-100/95 sm:text-xs">
                 กดกรอกข้อมูล
               </span>
             </button>

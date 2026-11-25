@@ -146,7 +146,9 @@ export function AdminLoginModal({
             <input
               id="admin-passcode-input"
               type="password"
-              autoComplete="off"
+              autoComplete={isConfigured === false ? 'new-password' : 'off'}
+              autoCapitalize="off"
+              spellCheck={false}
               autoFocus
               required
               value={passcode}

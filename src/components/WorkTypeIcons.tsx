@@ -3,9 +3,9 @@ interface IconProps {
 }
 
 /**
- * Modern icon: Wrench tightening a Hybrid Inverter unit
+ * Modern vivid-orange icon: Hybrid Inverter with a screwdriver pressing down onto it
  */
-export function InverterWrenchIcon({ className = 'h-11 w-11' }: IconProps) {
+export function InverterWrenchIcon({ className = 'h-14 w-14' }: IconProps) {
   return (
     <svg
       viewBox="0 0 64 64"
@@ -14,64 +14,130 @@ export function InverterWrenchIcon({ className = 'h-11 w-11' }: IconProps) {
       className={className}
       aria-hidden="true"
     >
-      {/* Hybrid Inverter Body */}
+      {/* Hybrid Inverter Chassis */}
       <rect
-        x="10"
-        y="10"
-        width="30"
-        height="40"
-        rx="4"
-        fill="rgba(255,255,255,0.16)"
-        stroke="currentColor"
-        strokeWidth="2.4"
-      />
-      {/* Inverter Top Cooling Fins */}
-      <path
-        d="M16 15H34M16 19H28"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        opacity="0.85"
-      />
-      {/* Inverter Display Screen with Power / Lightning */}
-      <rect
-        x="15"
+        x="13"
         y="24"
-        width="20"
-        height="13"
-        rx="2.5"
-        fill="rgba(255,255,255,0.14)"
-        stroke="currentColor"
-        strokeWidth="1.8"
+        width="38"
+        height="34"
+        rx="5"
+        fill="#FFF7ED"
+        stroke="#EA580C"
+        strokeWidth="2.6"
       />
+      {/* Top Mounting Lip / Heatsink Plate */}
       <path
-        d="M26.2 26.8L22.5 31H25.5L24.2 34.4L28 30.1H25L26.2 26.8Z"
-        fill="currentColor"
-      />
-      {/* Inverter Bottom Terminals */}
-      <circle cx="18" cy="43.5" r="2" fill="currentColor" />
-      <circle cx="25" cy="43.5" r="2" fill="currentColor" />
-      <path d="M18 50V54M25 50V54" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-
-      {/* Bolt / Nut on side of Inverter being tightened */}
-      <circle cx="38" cy="43.5" r="3" fill="currentColor" />
-
-      {/* Modern Open-End Wrench angled onto the bolt */}
-      <path
-        d="M52.8 25.5C50.9 23.6 47.9 23.6 45.9 25.4L44.2 27.1L47.3 30.2L44.8 32.7L41.7 29.6L40 31.3C38.1 33.2 38.1 36.2 40 38.2L35.4 42.8C34.4 43.8 34.4 45.4 35.4 46.4C36.4 47.4 38 47.4 39 46.4L43.6 41.8C45.6 43.7 48.6 43.7 50.5 41.8L52.2 40.1L49.1 37L51.6 34.5L54.7 37.6L56.4 35.9C58.2 33.9 58.2 30.9 56.3 29L52.8 25.5Z"
-        fill="rgba(255,255,255,0.22)"
-        stroke="currentColor"
+        d="M18 24V21.5C18 20.67 18.67 20 19.5 20H31.5C32.33 20 33 20.67 33 21.5V24"
+        fill="#FFEDD5"
+        stroke="#EA580C"
         strokeWidth="2.2"
         strokeLinejoin="round"
+      />
+      {/* Inverter Cooling Fins */}
+      <path
+        d="M19 29H31M19 32.5H27"
+        stroke="#F97316"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+
+      {/* Hybrid Inverter Digital Display Screen */}
+      <rect
+        x="18.5"
+        y="36.5"
+        width="27"
+        height="13.5"
+        rx="2.8"
+        fill="#F97316"
+        stroke="#C2410C"
+        strokeWidth="1.8"
+      />
+      {/* Hybrid Power Lightning Symbol inside LCD */}
+      <path
+        d="M27.8 38.8L23.6 43.8H26.9L25.4 47.8L30.2 42.6H26.8L27.8 38.8Z"
+        fill="#FFFFFF"
+      />
+      {/* Solar / Battery Status Bars on LCD */}
+      <path
+        d="M34 40.5H41.5M34 43.3H39.5M34 46.1H41.5"
+        stroke="#FFEDD5"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+
+      {/* Bottom Inverter Cable Terminals */}
+      <circle cx="22" cy="54" r="1.9" fill="#EA580C" />
+      <circle cx="32" cy="54" r="1.9" fill="#EA580C" />
+      <circle cx="42" cy="54" r="1.9" fill="#EA580C" />
+      <path
+        d="M22 58V61.5M32 58V61.5M42 58V61.5"
+        stroke="#EA580C"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+      />
+
+      {/* Terminal Screw Head on Top of Hybrid Inverter */}
+      <rect
+        x="37.5"
+        y="21.2"
+        width="9"
+        height="3.2"
+        rx="1.2"
+        fill="#FB923C"
+        stroke="#C2410C"
+        strokeWidth="1.6"
+      />
+
+      {/* Screwdriver Pointing Straight Down (ไขควงจิ้มลง) */}
+      {/* Ergonomic Fluted Orange Handle */}
+      <rect
+        x="37.2"
+        y="2.5"
+        width="9.6"
+        height="11.5"
+        rx="3.4"
+        fill="#F97316"
+        stroke="#C2410C"
+        strokeWidth="2.2"
+      />
+      {/* Handle Grip Lines */}
+      <path
+        d="M40.3 5.2V11.2M43.7 5.2V11.2"
+        stroke="#FFEDD5"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      {/* Collar */}
+      <rect
+        x="39.4"
+        y="14"
+        width="5.2"
+        height="2.6"
+        rx="0.8"
+        fill="#EA580C"
+      />
+      {/* Driver Shaft & Tip Pressing Down into Screw */}
+      <path
+        d="M42 16.6V21.2"
+        stroke="#C2410C"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+      />
+      {/* Subtle Downward Press Motion Accents */}
+      <path
+        d="M34.2 14.5L35.4 17.5M49.8 14.5L48.6 17.5"
+        stroke="#FB923C"
+        strokeWidth="1.8"
+        strokeLinecap="round"
       />
     </svg>
   );
 }
 
 /**
- * Modern icon: Shopping Cart carrying a Solar Panel
+ * Modern vivid-orange icon: Shopping Cart carrying Solar Cell Equipment
  */
-export function SolarCartIcon({ className = 'h-11 w-11' }: IconProps) {
+export function SolarCartIcon({ className = 'h-14 w-14' }: IconProps) {
   return (
     <svg
       viewBox="0 0 64 64"
@@ -80,80 +146,96 @@ export function SolarCartIcon({ className = 'h-11 w-11' }: IconProps) {
       className={className}
       aria-hidden="true"
     >
-      {/* Solar Panel inside the cart basket (tilted slightly for 3D depth) */}
-      <g>
-        <path
-          d="M22 13L49 10L53 31L26 34L22 13Z"
-          fill="rgba(255,255,255,0.22)"
-          stroke="currentColor"
-          strokeWidth="2.3"
-          strokeLinejoin="round"
-        />
-        {/* Photovoltaic Grid Lines */}
-        <path
-          d="M31 12L35 33M40 11L44 32"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          opacity="0.9"
-        />
-        <path
-          d="M23.5 20L50.5 17M24.8 27L51.8 24"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          opacity="0.9"
-        />
-      </g>
-
-      {/* Modern Shopping Cart Handle & Frame */}
+      {/* Solar Panel inside Cart Basket */}
       <path
-        d="M8 15H14.5L20.5 43H49.5L54.5 26"
-        stroke="currentColor"
-        strokeWidth="2.6"
+        d="M25 11L49.5 7.5L53 28.5L28.5 32L25 11Z"
+        fill="#F97316"
+        stroke="#C2410C"
+        strokeWidth="2.2"
+        strokeLinejoin="round"
+      />
+      {/* Solar Panel Cell Grid */}
+      <path
+        d="M33.2 9.8L36.7 30.8M41.3 8.6L44.8 29.6"
+        stroke="#FFEDD5"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="M26.2 18L50.7 14.5M27.3 25L51.8 21.5"
+        stroke="#FFEDD5"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+
+      {/* Compact Solar Equipment / Battery Box beside Panel inside Cart */}
+      <rect
+        x="18.5"
+        y="20.5"
+        width="13.5"
+        height="15.5"
+        rx="2.4"
+        fill="#FFEDD5"
+        stroke="#EA580C"
+        strokeWidth="2.1"
+      />
+      <path
+        d="M25.8 23.6L23 27.9H25.3L24.2 31.6L27.7 27H25.2L25.8 23.6Z"
+        fill="#EA580C"
+      />
+
+      {/* Cart Basket Translucent Orange Body */}
+      <path
+        d="M15.2 25.5H54.5L50 43H19.5L15.2 25.5Z"
+        fill="rgba(249, 115, 22, 0.16)"
+      />
+
+      {/* Shopping Cart Handle & Main Frame */}
+      <path
+        d="M6.5 16H13.2L19.5 43H49.8L54.8 25.5H15.6"
+        stroke="#EA580C"
+        strokeWidth="2.9"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* Cart Basket Front Rail */}
+
+      {/* Cart Basket Horizontal Rails */}
       <path
-        d="M17.5 30H53"
-        stroke="currentColor"
-        strokeWidth="2.2"
+        d="M17.2 32H52.8M18.6 37.8H51.2"
+        stroke="#F97316"
+        strokeWidth="2.1"
         strokeLinecap="round"
       />
+
+      {/* Cart Lower Frame */}
       <path
-        d="M19 37H51"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        opacity="0.85"
-      />
-      {/* Cart Base Support */}
-      <path
-        d="M21 43L19.5 48.5H49"
-        stroke="currentColor"
-        strokeWidth="2.2"
+        d="M20.2 43L18.8 48.2H49.2"
+        stroke="#EA580C"
+        strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
 
       {/* Cart Wheels */}
       <circle
-        cx="23.5"
-        cy="53.5"
-        r="3.5"
-        fill="rgba(255,255,255,0.2)"
-        stroke="currentColor"
-        strokeWidth="2.3"
+        cx="23"
+        cy="53.2"
+        r="4"
+        fill="#FFEDD5"
+        stroke="#EA580C"
+        strokeWidth="2.6"
       />
+      <circle cx="23" cy="53.2" r="1.4" fill="#C2410C" />
+
       <circle
-        cx="45.5"
-        cy="53.5"
-        r="3.5"
-        fill="rgba(255,255,255,0.2)"
-        stroke="currentColor"
-        strokeWidth="2.3"
+        cx="45.8"
+        cy="53.2"
+        r="4"
+        fill="#FFEDD5"
+        stroke="#EA580C"
+        strokeWidth="2.6"
       />
+      <circle cx="45.8" cy="53.2" r="1.4" fill="#C2410C" />
     </svg>
   );
 }
