@@ -69,7 +69,9 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-function readStoredAdminCred(): AdminCredential | null {
+const REDIS_ADMIN_CRED_KEY = 'my-freelance:admin-cred:v1';
+
+function readLocalAdminCred(): AdminCredential | null {
   if (!fs.existsSync(ADMIN_CRED_FILE)) return null;
   try {
     const raw = fs.readFileSync(ADMIN_CRED_FILE, 'utf-8');
@@ -83,10 +85,38 @@ function readStoredAdminCred(): AdminCredential | null {
   return null;
 }
 
-function isAdminConfigured(): boolean {
+async function loadStoredAdminCred(): Promise<AdminCredential | null> {
+  if (HAS_REDIS_CLOUD) {
+    try {
+      const remote = await redisGetJson<Partial<AdminCredential>>(REDIS_ADMIN_CRED_KEY);
+      if (remote && typeof remote.salt === 'string' && typeof remote.hash === 'string') {
+        return { salt: remote.salt, hash: remote.hash };
+      }
+    } catch {
+      // Fall back to local file check
+    }
+  }
+  return readLocalAdminCred();
+}
+
+async function saveStoredAdminCred(cred: AdminCredential): Promise<void> {
+  if (HAS_REDIS_CLOUD) {
+    await redisSetJson(REDIS_ADMIN_CRED_KEY, cred);
+    return;
+  }
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  const tmpFile = `${ADMIN_CRED_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(cred, null, 2), 'utf-8');
+  fs.renameSync(tmpFile, ADMIN_CRED_FILE);
+}
+
+async function isAdminConfigured(): Promise<boolean> {
+  const stored = await loadStoredAdminCred();
+  if (stored !== null) return true;
   const envPass = process.env.ADMIN_PASSCODE?.trim();
-  if (envPass) return true;
-  return readStoredAdminCred() !== null;
+  return Boolean(envPass);
 }
 
 function timingSafeCompareStrings(a: string, b: string): boolean {
@@ -99,9 +129,27 @@ function normalizePasscodeSeparators(value: string): string {
   return value.replace(/[\s-]+/g, '').trim();
 }
 
-function verifyPasscode(candidate: string): boolean {
+async function verifyPasscode(candidate: string): Promise<boolean> {
   const trimmedCandidate = candidate.trim();
   const compactCandidate = normalizePasscodeSeparators(trimmedCandidate);
+
+  // Stored credential (changed/configured by Admin in DB) takes priority over initial env passcode
+  const stored = await loadStoredAdminCred();
+  if (stored) {
+    const expected = Buffer.from(stored.hash, 'hex');
+    const derivedExact = crypto.scryptSync(trimmedCandidate, stored.salt, 64);
+    if (derivedExact.length === expected.length && crypto.timingSafeEqual(derivedExact, expected)) {
+      return true;
+    }
+    if (compactCandidate && compactCandidate !== trimmedCandidate && compactCandidate.length >= 6) {
+      const derivedCompact = crypto.scryptSync(compactCandidate, stored.salt, 64);
+      if (derivedCompact.length === expected.length && crypto.timingSafeEqual(derivedCompact, expected)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   const envPass = process.env.ADMIN_PASSCODE?.trim();
   if (envPass) {
     if (timingSafeCompareStrings(trimmedCandidate, envPass)) {
@@ -113,19 +161,7 @@ function verifyPasscode(candidate: string): boolean {
     }
     return false;
   }
-  const stored = readStoredAdminCred();
-  if (!stored) return false;
-  const expected = Buffer.from(stored.hash, 'hex');
-  const derivedExact = crypto.scryptSync(trimmedCandidate, stored.salt, 64);
-  if (derivedExact.length === expected.length && crypto.timingSafeEqual(derivedExact, expected)) {
-    return true;
-  }
-  if (compactCandidate && compactCandidate !== trimmedCandidate && compactCandidate.length >= 6) {
-    const derivedCompact = crypto.scryptSync(compactCandidate, stored.salt, 64);
-    if (derivedCompact.length === expected.length && crypto.timingSafeEqual(derivedCompact, expected)) {
-      return true;
-    }
-  }
+
   return false;
 }
 
@@ -183,16 +219,49 @@ function requireAdmin(
 
 export type StorageMode = 'redis-cloud' | 'local-disk' | 'vercel-tmp';
 
-const REDIS_URL = (
-  process.env.KV_REST_API_URL ||
-  process.env.UPSTASH_REDIS_REST_URL ||
-  ''
-).trim();
-const REDIS_TOKEN = (
-  process.env.KV_REST_API_TOKEN ||
-  process.env.UPSTASH_REDIS_REST_TOKEN ||
-  ''
-).trim();
+function isValidRedisRestUrl(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.includes('MY_')) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function resolveRedisConfig(): { url: string; token: string } {
+  const directPairs: Array<[string | undefined, string | undefined]> = [
+    [process.env.KV_REST_API_URL, process.env.KV_REST_API_TOKEN],
+    [process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN],
+  ];
+  for (const [rawUrl, rawToken] of directPairs) {
+    const url = (rawUrl || '').trim();
+    const token = (rawToken || '').trim();
+    if (token && isValidRedisRestUrl(url)) {
+      return { url, token };
+    }
+  }
+  for (const [key, val] of Object.entries(process.env)) {
+    const url = (val || '').trim();
+    if (!url || !isValidRedisRestUrl(url)) continue;
+    if (key.endsWith('_KV_REST_API_URL')) {
+      const prefix = key.slice(0, -'_REST_API_URL'.length);
+      const tok = process.env[`${prefix}_REST_API_TOKEN`]?.trim();
+      if (tok) return { url, token: tok };
+    }
+    if (key.endsWith('_REDIS_REST_URL')) {
+      const prefix = key.slice(0, -'_REDIS_REST_URL'.length);
+      const tok = process.env[`${prefix}_REDIS_REST_TOKEN`]?.trim();
+      if (tok) return { url, token: tok };
+    }
+  }
+  return { url: '', token: '' };
+}
+
+const REDIS_CONFIG = resolveRedisConfig();
+const REDIS_URL = REDIS_CONFIG.url;
+const REDIS_TOKEN = REDIS_CONFIG.token;
 const HAS_REDIS_CLOUD = Boolean(REDIS_URL && REDIS_TOKEN);
 
 const REDIS_RECORDS_KEY = 'my-freelance:records:v1';
@@ -226,13 +295,10 @@ async function redisCommand<T = unknown>(args: string[]): Promise<T | null> {
 }
 
 async function redisGetJson<T>(key: string): Promise<T | null> {
-  try {
-    const raw = await redisCommand<string | null>(['GET', key]);
-    if (typeof raw !== 'string' || !raw.trim()) return null;
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+  const raw = await redisCommand<string | null>(['GET', key]);
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  return JSON.parse(raw) as T;
 }
 
 async function redisSetJson(key: string, value: unknown): Promise<void> {
@@ -272,10 +338,10 @@ function readLocalRecordsSafe(): ServerTeamRecord[] {
 async function loadRecords(): Promise<ServerTeamRecord[]> {
   if (HAS_REDIS_CLOUD) {
     const remote = await redisGetJson<ServerTeamRecord[]>(REDIS_RECORDS_KEY);
-    if (Array.isArray(remote)) {
-      return remote;
+    if (remote !== null) {
+      return Array.isArray(remote) ? remote : [];
     }
-    // Bootstrap Redis from local records if available without wiping
+    // Bootstrap Redis only when key truly does not exist yet
     const localSeed = fs.existsSync(RECORDS_FILE) ? readLocalRecordsSafe() : [...INITIAL_SEED_RECORDS];
     await redisSetJson(REDIS_RECORDS_KEY, localSeed);
     return localSeed;
@@ -399,19 +465,23 @@ async function getOrAdvanceSourceRevision(): Promise<RevisionState> {
 
   let state: RevisionState | null = null;
   if (HAS_REDIS_CLOUD) {
-    const remoteState = await redisGetJson<Partial<RevisionState>>(REDIS_REVISION_KEY);
-    if (
-      remoteState &&
-      typeof remoteState.sourceRevision === 'number' &&
-      typeof remoteState.dataRevision === 'number' &&
-      typeof remoteState.lastSourceHash === 'string'
-    ) {
-      state = {
-        sourceRevision: Math.max(remoteState.sourceRevision, baseRevision),
-        dataRevision: Math.max(remoteState.dataRevision, 1),
-        lastSourceHash: remoteState.lastSourceHash,
-        updatedAt: typeof remoteState.updatedAt === 'string' ? remoteState.updatedAt : nowIso,
-      };
+    try {
+      const remoteState = await redisGetJson<Partial<RevisionState>>(REDIS_REVISION_KEY);
+      if (
+        remoteState &&
+        typeof remoteState.sourceRevision === 'number' &&
+        typeof remoteState.dataRevision === 'number' &&
+        typeof remoteState.lastSourceHash === 'string'
+      ) {
+        state = {
+          sourceRevision: Math.max(remoteState.sourceRevision, baseRevision),
+          dataRevision: Math.max(remoteState.dataRevision, 1),
+          lastSourceHash: remoteState.lastSourceHash,
+          updatedAt: typeof remoteState.updatedAt === 'string' ? remoteState.updatedAt : nowIso,
+        };
+      }
+    } catch {
+      state = null;
     }
   }
 
@@ -524,8 +594,45 @@ async function geocodeThaiAddress(
         }
       }
     } catch {
-      // Fall back to deterministic Thailand province/area coordinates
+      // Fall through to Nominatim / deterministic province coords
     }
+  }
+
+  try {
+    const cleanSub = subdistrict.trim().replace(/^(ตำบล|ต\.|แขวง)\s*/g, '');
+    const cleanDist = district.trim().replace(/^(อำเภอ|อ\.|เขต)\s*/g, '');
+    const query = [cleanSub, cleanDist, normalizedProvince, 'Thailand'].filter(Boolean).join(', ');
+    const nomUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=th&limit=1&q=${encodeURIComponent(
+      query
+    )}`;
+    const nomRes = await fetch(nomUrl, {
+      headers: {
+        'User-Agent': 'MyFreelanceApp/1.0',
+        'Accept-Language': 'th,en',
+      },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (nomRes.ok) {
+      const results = (await nomRes.json()) as Array<{ lat?: string; lon?: string }>;
+      const first = results[0];
+      const latNum = first?.lat ? Number(first.lat) : NaN;
+      const lonNum = first?.lon ? Number(first.lon) : NaN;
+      if (
+        Number.isFinite(latNum) &&
+        Number.isFinite(lonNum) &&
+        latNum >= 5 &&
+        latNum <= 21 &&
+        lonNum >= 97 &&
+        lonNum <= 106
+      ) {
+        return {
+          lat: Number(latNum.toFixed(6)),
+          lng: Number(lonNum.toFixed(6)),
+        };
+      }
+    }
+  } catch {
+    // Fall back to deterministic Thailand province/area coordinates
   }
 
   return resolveThailandCoords(subdistrict, district, normalizedProvince);
@@ -572,16 +679,19 @@ export function createApiApp(): express.Express {
   });
 
   app.get('/api/admin/status', async (_req, res) => {
-    const revState = await getOrAdvanceSourceRevision();
+    const [revState, configured] = await Promise.all([
+      getOrAdvanceSourceRevision(),
+      isAdminConfigured(),
+    ]);
     res.json({
-      configured: isAdminConfigured(),
+      configured,
       sourceRevision: revState.sourceRevision,
       storageMode: getStorageMode(),
     });
   });
 
-  app.post('/api/admin/setup', (req, res) => {
-    if (isAdminConfigured()) {
+  app.post('/api/admin/setup', async (req, res) => {
+    if (await isAdminConfigured()) {
       res.status(409).json({ error: 'รหัสผ่าน Admin ถูกตั้งค่าไว้แล้ว' });
       return;
     }
@@ -594,21 +704,13 @@ export function createApiApp(): express.Express {
       return;
     }
 
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-
     const salt = crypto.randomBytes(16).toString('hex');
     const hash = crypto.scryptSync(passcodeToStore, salt, 64).toString('hex');
 
     try {
-      fs.writeFileSync(
-        ADMIN_CRED_FILE,
-        JSON.stringify({ salt, hash }, null, 2),
-        { encoding: 'utf-8', flag: 'wx' }
-      );
+      await saveStoredAdminCred({ salt, hash });
     } catch {
-      res.status(409).json({ error: 'รหัสผ่าน Admin ถูกตั้งค่าไว้แล้ว' });
+      res.status(500).json({ error: 'ไม่สามารถบันทึกรหัสผ่าน Admin ได้' });
       return;
     }
 
@@ -616,26 +718,56 @@ export function createApiApp(): express.Express {
     res.status(201).json({ token });
   });
 
-  app.post('/api/admin/login', (req, res) => {
+  app.post('/api/admin/login', async (req, res) => {
     const clientIp = req.ip || 'unknown';
     if (!checkRateLimit(clientIp)) {
       res.status(429).json({ error: 'ลองผิดหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่' });
       return;
     }
 
-    if (!isAdminConfigured()) {
+    if (!(await isAdminConfigured())) {
       res.status(400).json({ error: 'ยังไม่ได้ตั้งค่ารหัสผ่าน Admin' });
       return;
     }
 
     const passcode = typeof req.body?.passcode === 'string' ? req.body.passcode : '';
-    if (!passcode || !verifyPasscode(passcode)) {
+    if (!passcode || !(await verifyPasscode(passcode))) {
       res.status(401).json({ error: 'รหัสผ่าน Admin ไม่ถูกต้อง' });
       return;
     }
 
     const token = issueAdminToken();
     res.json({ token });
+  });
+
+  app.post('/api/admin/change-passcode', requireAdmin, async (req, res) => {
+    const currentPasscode =
+      typeof req.body?.currentPasscode === 'string' ? req.body.currentPasscode : '';
+    const rawNewPasscode =
+      typeof req.body?.newPasscode === 'string' ? req.body.newPasscode.trim() : '';
+
+    if (!currentPasscode || !(await verifyPasscode(currentPasscode))) {
+      res.status(401).json({ error: 'รหัสผ่านเดิมไม่ถูกต้อง' });
+      return;
+    }
+
+    const compactNew = normalizePasscodeSeparators(rawNewPasscode);
+    const passcodeToStore = compactNew.length >= 6 ? compactNew : rawNewPasscode;
+    if (passcodeToStore.length < 6) {
+      res.status(400).json({ error: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร' });
+      return;
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(passcodeToStore, salt, 64).toString('hex');
+
+    try {
+      await saveStoredAdminCred({ salt, hash });
+      const token = issueAdminToken();
+      res.json({ success: true, token });
+    } catch {
+      res.status(500).json({ error: 'ไม่สามารถบันทึกรหัสผ่านใหม่ได้' });
+    }
   });
 
   app.get('/api/admin/revision', requireAdmin, async (_req, res) => {
