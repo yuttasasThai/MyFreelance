@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
 import {
   APIProvider,
+  APILoadingStatus,
   Map as GoogleMap,
   AdvancedMarker,
   InfoWindow,
+  useApiLoadingStatus,
   useMap,
 } from '@vis.gl/react-google-maps';
 import { MapPin, Layers, Wrench, ShoppingBag } from 'lucide-react';
@@ -21,6 +23,19 @@ type GroupingLevel = 'area' | 'province';
 type MarkerAnchor = ComponentProps<typeof InfoWindow>['anchor'];
 
 const THAILAND_CENTER = { lat: 13.7563, lng: 100.5018 };
+const MAP_LIBRARIES: string[] = ['marker'];
+
+function MapLoadingStatusGuard({ onAuthOrLoadFailure }: { onAuthOrLoadFailure: () => void }) {
+  const status = useApiLoadingStatus();
+
+  useEffect(() => {
+    if (status === APILoadingStatus.FAILED || status === APILoadingStatus.AUTH_FAILURE) {
+      onAuthOrLoadFailure();
+    }
+  }, [status, onAuthOrLoadFailure]);
+
+  return null;
+}
 
 function MapCameraController({ target }: { target: { lat: number; lng: number; zoom: number } | null }) {
   const map = useMap();
@@ -91,6 +106,9 @@ export function SummaryMapPage({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [activeMarker, setActiveMarker] = useState<MarkerAnchor>(null);
   const [mapLoadError, setMapLoadError] = useState(false);
+  const handleMapLoadError = useCallback(() => {
+    setMapLoadError(true);
+  }, []);
   const [cameraTarget, setCameraTarget] = useState<{
     lat: number;
     lng: number;
@@ -318,9 +336,10 @@ export function SummaryMapPage({
                 apiKey={apiKey}
                 language="th"
                 region="TH"
-                libraries={['marker']}
-                onError={() => setMapLoadError(true)}
+                libraries={MAP_LIBRARIES}
+                onError={handleMapLoadError}
               >
+                <MapLoadingStatusGuard onAuthOrLoadFailure={handleMapLoadError} />
                 <GoogleMap
                   mapId="DEMO_MAP_ID"
                   defaultCenter={THAILAND_CENTER}
