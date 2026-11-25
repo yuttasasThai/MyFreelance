@@ -221,7 +221,7 @@ const SAFE_ROOT_FILES = [
   'server.ts',
 ];
 
-const SAFE_SOURCE_DIRS = ['src', 'api', 'lib'];
+const SAFE_SOURCE_DIRS = ['src', 'api', 'lib', 'public'];
 
 function collectSourceFiles(relativeDir: string, acc: string[]): void {
   const fullDir = path.resolve(ROOT_DIR, relativeDir);
@@ -234,6 +234,7 @@ function collectSourceFiles(relativeDir: string, acc: string[]): void {
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
     const relChild = path.posix.join(relativeDir, entry.name);
+    if (relChild === 'api/index.mjs') continue;
     const fullChild = path.resolve(ROOT_DIR, relChild);
     if (!fullChild.startsWith(ROOT_DIR + path.sep)) continue;
 
