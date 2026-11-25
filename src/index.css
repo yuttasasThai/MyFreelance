@@ -99,13 +99,84 @@
 
 @media (prefers-reduced-motion: reduce) {
   .orb-3d-assembly,
-  .orb-3d-sales {
+  .orb-3d-sales,
+  .btn-3d-image-assembly,
+  .btn-3d-image-sales {
     transition: none;
   }
   .orb-3d-assembly:hover,
   .orb-3d-sales:hover,
   .orb-3d-assembly:active,
-  .orb-3d-sales:active {
+  .orb-3d-sales:active,
+  .btn-3d-image-assembly:hover,
+  .btn-3d-image-sales:hover,
+  .btn-3d-image-assembly:active,
+  .btn-3d-image-sales:active {
     transform: none;
   }
+}
+
+/* Tactile 3D Beveled Image Button Frames */
+.btn-3d-image-assembly {
+  background: linear-gradient(155deg, #93c5fd 0%, #2563eb 42%, #1e3a8a 100%);
+  box-shadow:
+    0 7px 0 0 #172554,
+    0 18px 32px -8px rgba(30, 58, 138, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.75),
+    inset 0 2px 3px rgba(255, 255, 255, 0.85),
+    inset 0 -3px 6px rgba(15, 23, 42, 0.45);
+  transition:
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-3d-image-assembly:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 11px 0 0 #172554,
+    0 24px 40px -10px rgba(29, 78, 216, 0.56),
+    0 0 0 2px rgba(219, 234, 254, 0.95),
+    inset 0 2px 4px rgba(255, 255, 255, 0.92),
+    inset 0 -3px 6px rgba(15, 23, 42, 0.4);
+}
+
+.btn-3d-image-assembly:active {
+  transform: translateY(4px);
+  box-shadow:
+    0 3px 0 0 #172554,
+    0 8px 16px -6px rgba(30, 58, 138, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.7),
+    inset 0 3px 6px rgba(15, 23, 42, 0.4);
+}
+
+.btn-3d-image-sales {
+  background: linear-gradient(155deg, #86efac 0%, #16a34a 42%, #14532d 100%);
+  box-shadow:
+    0 7px 0 0 #052e16,
+    0 18px 32px -8px rgba(20, 83, 45, 0.48),
+    0 0 0 1px rgba(255, 255, 255, 0.75),
+    inset 0 2px 3px rgba(255, 255, 255, 0.85),
+    inset 0 -3px 6px rgba(5, 46, 22, 0.45);
+  transition:
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-3d-image-sales:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 11px 0 0 #052e16,
+    0 24px 40px -10px rgba(22, 163, 74, 0.54),
+    0 0 0 2px rgba(220, 252, 231, 0.95),
+    inset 0 2px 4px rgba(255, 255, 255, 0.92),
+    inset 0 -3px 6px rgba(5, 46, 22, 0.4);
+}
+
+.btn-3d-image-sales:active {
+  transform: translateY(4px);
+  box-shadow:
+    0 3px 0 0 #052e16,
+    0 8px 16px -6px rgba(20, 83, 45, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.7),
+    inset 0 3px 6px rgba(5, 46, 22, 0.4);
 }
