@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock, TableProperties, MapPin, Download } from 'lucide-react';
+import { Lock, TableProperties, MapPin, Download, KeyRound } from 'lucide-react';
 import { InverterWrenchIcon, SolarCartIcon } from './WorkTypeIcons.tsx';
 import type { AppPage, WorkType } from '../types.ts';
 
@@ -9,6 +9,7 @@ interface HomePageProps {
   sourceRevision: number;
   onSelectWorkType: (type: WorkType) => void;
   onOpenAdminLogin: () => void;
+  onOpenChangePasscode: () => void;
   onNavigate: (page: AppPage) => void;
   onDownloadSource: () => void;
 }
@@ -22,6 +23,7 @@ export function HomePage({
   sourceRevision,
   onSelectWorkType,
   onOpenAdminLogin,
+  onOpenChangePasscode,
   onNavigate,
   onDownloadSource,
 }: HomePageProps) {
@@ -155,6 +157,14 @@ export function HomePage({
                   ? 'กำลังเตรียมไฟล์...'
                   : `ดาวน์โหลด Source Code (rev${sourceRevision})`}
               </span>
+            </button>
+            <button
+              type="button"
+              onClick={onOpenChangePasscode}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs sm:text-sm font-medium text-slate-800 shadow-xs hover:bg-slate-50 cursor-pointer"
+            >
+              <KeyRound className="h-4 w-4 text-slate-600" />
+              <span>เปลี่ยนรหัส Admin</span>
             </button>
           </>
         )}

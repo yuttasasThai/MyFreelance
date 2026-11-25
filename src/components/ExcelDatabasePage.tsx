@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Upload,
   Database,
+  KeyRound,
 } from 'lucide-react';
 import type { StorageMode, TeamRecord, WorkType } from '../types.ts';
 import { exportRecordsToCsv, exportRecordsToExcel } from '../utils/excelExport.ts';
@@ -28,6 +29,7 @@ interface ExcelDatabasePageProps {
   onDeleteRecord: (id: string) => Promise<void>;
   onClearAllRecords: () => Promise<void>;
   onImportRecords: (incoming: unknown[]) => Promise<void>;
+  onOpenChangePasscode: () => void;
   onDownloadSource: () => void;
 }
 
@@ -57,6 +59,7 @@ export function ExcelDatabasePage({
   onDeleteRecord,
   onClearAllRecords,
   onImportRecords,
+  onOpenChangePasscode,
   onDownloadSource,
 }: ExcelDatabasePageProps) {
   const [filterType, setFilterType] = useState<'all' | WorkType>('all');
@@ -215,6 +218,15 @@ export function ExcelDatabasePage({
           >
             <RotateCcw className="h-4 w-4" />
             <span>Clear ข้อมูลเก่า</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenChangePasscode}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 whitespace-nowrap hover:bg-slate-50 cursor-pointer"
+          >
+            <KeyRound className="h-4 w-4" />
+            <span>เปลี่ยนรหัส Admin</span>
           </button>
 
           <button

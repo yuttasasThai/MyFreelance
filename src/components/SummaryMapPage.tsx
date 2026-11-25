@@ -11,7 +11,7 @@ import {
 import { MapPin, Layers, Wrench, ShoppingBag, Map as MapIcon, Building2 } from 'lucide-react';
 import type { AreaGroup, TeamRecord, WorkType } from '../types.ts';
 import { THAILAND_PROVINCES, normalizeProvinceName, resolveThailandCoords } from '../data/thailandProvinces.ts';
-import { SimpleThailandMap } from './SimpleThailandMap.tsx';
+import { LeafletThailandMap } from './LeafletThailandMap.tsx';
 
 interface SummaryMapPageProps {
   records: TeamRecord[];
@@ -21,7 +21,7 @@ interface SummaryMapPageProps {
 }
 
 type GroupingLevel = 'subdistrict' | 'district' | 'province';
-type MapEngineMode = 'simple2d' | 'google';
+type MapEngineMode = 'normal' | 'google';
 type MarkerAnchor = ComponentProps<typeof InfoWindow>['anchor'];
 
 const THAILAND_CENTER = { lat: 13.7563, lng: 100.5018 };
@@ -107,7 +107,7 @@ export function SummaryMapPage({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [activeMarker, setActiveMarker] = useState<MarkerAnchor>(null);
   const [mapLoadError, setMapLoadError] = useState(false);
-  const [preferredMode, setPreferredMode] = useState<MapEngineMode>('google');
+  const [preferredMode, setPreferredMode] = useState<MapEngineMode>('normal');
 
   const handleMapLoadError = useCallback(() => {
     setMapLoadError(true);
@@ -122,7 +122,7 @@ export function SummaryMapPage({
 
   const canUseGoogleMaps = Boolean(apiKey) && !mapLoadError && !isLoadingApiKey;
   const activeEngine: MapEngineMode =
-    canUseGoogleMaps && preferredMode === 'google' ? 'google' : 'simple2d';
+    canUseGoogleMaps && preferredMode === 'google' ? 'google' : 'normal';
 
   const filteredRecords = useMemo(() => {
     if (filterType === 'all') return records;
@@ -336,15 +336,15 @@ export function SummaryMapPage({
             <div className="inline-flex items-center gap-1 rounded-lg bg-slate-200/70 p-1">
               <button
                 type="button"
-                onClick={() => setPreferredMode('simple2d')}
+                onClick={() => setPreferredMode('normal')}
                 className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
-                  activeEngine === 'simple2d'
+                  activeEngine === 'normal'
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <MapIcon className="h-3.5 w-3.5" />
-                <span>แผนที่ 2D</span>
+                <span>แผนที่ปกติ</span>
               </button>
               <button
                 type="button"
@@ -367,8 +367,8 @@ export function SummaryMapPage({
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-stretch">
         {/* Map Viewport (8 cols) */}
         <div className="lg:col-span-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-          {activeEngine === 'simple2d' ? (
-            <SimpleThailandMap
+          {activeEngine === 'normal' ? (
+            <LeafletThailandMap
               areaGroups={areaGroups}
               selectedKey={selectedKey}
               onSelectGroup={(group) => {
