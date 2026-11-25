@@ -20,10 +20,10 @@ export function Navbar({
   onLogoutAdmin,
   recordCount,
 }: NavbarProps) {
-  const adminNavItems: Array<{ id: AppPage; label: string }> = [
-    { id: 'home', label: 'หน้าหลัก' },
-    { id: 'database', label: 'ฐานข้อมูล Excel' },
-    { id: 'map', label: 'แผนที่สรุปจำนวน' },
+  const adminNavItems: Array<{ id: AppPage; label: string; mobileLabel: string }> = [
+    { id: 'home', label: 'หน้าหลัก', mobileLabel: 'หน้าหลัก' },
+    { id: 'database', label: 'ฐานข้อมูล Excel', mobileLabel: 'ฐานข้อมูล' },
+    { id: 'map', label: 'แผนที่สรุปจำนวน', mobileLabel: 'แผนที่' },
   ];
 
   return (
@@ -38,8 +38,8 @@ export function Navbar({
           ทีมงานอิสระ
         </button>
 
-        {/* Zone 2: Navigation links (only visible when authenticated as Admin) */}
-        <nav aria-label="เมนูหลัก" className="flex items-center gap-3 sm:gap-6 overflow-x-auto">
+        {/* Zone 2: Desktop Navigation links (only visible when authenticated as Admin) */}
+        <nav aria-label="เมนูหลัก" className="hidden md:flex items-center gap-6">
           {isAdmin && (
             <>
               {adminNavItems.map((item) => {
@@ -50,7 +50,7 @@ export function Navbar({
                     type="button"
                     onClick={() => onNavigate(item.id)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`relative py-2 text-xs sm:text-sm font-medium whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    className={`relative py-2 text-sm font-medium whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
                       isActive ? 'text-slate-900' : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
@@ -67,7 +67,7 @@ export function Navbar({
               <button
                 type="button"
                 onClick={onLogoutAdmin}
-                className="py-2 text-xs sm:text-sm font-medium text-slate-500 hover:text-red-600 whitespace-nowrap shrink-0 cursor-pointer"
+                className="py-2 text-sm font-medium text-slate-500 hover:text-red-600 whitespace-nowrap shrink-0 cursor-pointer"
               >
                 ออกจาก Admin
               </button>
@@ -99,6 +99,40 @@ export function Navbar({
           )}
         </div>
       </div>
+
+      {/* Mobile Admin Navigation Row (no horizontal cut-off) */}
+      {isAdmin && (
+        <nav
+          aria-label="เมนูผู้ดูแลระบบบนมือถือ"
+          className="grid grid-cols-4 border-t border-slate-100 bg-slate-50/80 md:hidden"
+        >
+          {adminNavItems.map((item) => {
+            const isActive = currentPage === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onNavigate(item.id)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`py-2.5 text-center text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                  isActive
+                    ? 'border-b-2 border-slate-900 bg-white text-slate-900'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {item.mobileLabel}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={onLogoutAdmin}
+            className="py-2.5 text-center text-xs font-medium text-slate-500 hover:text-red-600 whitespace-nowrap cursor-pointer"
+          >
+            ออก
+          </button>
+        </nav>
+      )}
     </header>
   );
 }

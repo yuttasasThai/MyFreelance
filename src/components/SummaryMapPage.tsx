@@ -13,6 +13,8 @@ import { THAILAND_PROVINCES, normalizeProvinceName } from '../data/thailandProvi
 interface SummaryMapPageProps {
   records: TeamRecord[];
   apiKey: string;
+  isLoadingApiKey?: boolean;
+  onRetryApiKey?: () => void;
 }
 
 type GroupingLevel = 'area' | 'province';
@@ -78,11 +80,17 @@ function AreaPinMarker({
   );
 }
 
-export function SummaryMapPage({ records, apiKey }: SummaryMapPageProps) {
+export function SummaryMapPage({
+  records,
+  apiKey,
+  isLoadingApiKey = false,
+  onRetryApiKey,
+}: SummaryMapPageProps) {
   const [filterType, setFilterType] = useState<'all' | WorkType>('all');
   const [groupingLevel, setGroupingLevel] = useState<GroupingLevel>('area');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [activeMarker, setActiveMarker] = useState<MarkerAnchor>(null);
+  const [mapLoadError, setMapLoadError] = useState(false);
   const [cameraTarget, setCameraTarget] = useState<{
     lat: number;
     lng: number;
@@ -267,18 +275,52 @@ export function SummaryMapPage({ records, apiKey }: SummaryMapPageProps) {
         {/* Google Map Viewport (8 cols) */}
         <div className="lg:col-span-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
           {!apiKey ? (
-            <div className="flex h-[540px] flex-col items-center justify-center bg-slate-50 p-6 text-center">
+            <div className="flex h-[280px] sm:h-[420px] flex-col items-center justify-center bg-slate-50 p-6 text-center">
               <MapPin className="h-10 w-10 text-slate-400" />
               <p className="mt-3 text-sm font-semibold text-slate-800">
-                กำลังรอ Google Maps API Key
+                {isLoadingApiKey ? 'กำลังโหลด Google Maps API Key...' : 'ยังไม่ได้ตั้งค่า Google Maps API Key'}
               </p>
-              <p className="mt-1 max-w-md text-xs text-slate-500">
-                กรุณารอสักครู่หรือรีเฟรชหน้าเว็บหลังจากตั้งค่า Google Maps Platform เสร็จสิ้น
+              <p className="mt-1.5 max-w-md text-xs leading-relaxed text-slate-500">
+                {isLoadingApiKey
+                  ? 'กรุณารอสักครู่ ระบบกำลังเชื่อมต่อกับแผนที่'
+                  : 'หากเปิดใช้งานบน Vercel กรุณาเพิ่มตัวแปร VITE_GOOGLE_MAPS_API_KEY ใน Vercel Project Settings -> Environment Variables แล้ว Redeploy'}
               </p>
+              {!isLoadingApiKey && onRetryApiKey && (
+                <button
+                  type="button"
+                  onClick={onRetryApiKey}
+                  className="mt-4 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-100 cursor-pointer"
+                >
+                  ลองโหลดแผนที่อีกครั้ง
+                </button>
+              )}
+            </div>
+          ) : mapLoadError ? (
+            <div className="flex h-[320px] sm:h-[460px] flex-col items-center justify-center bg-slate-50 p-6 text-center">
+              <MapPin className="h-10 w-10 text-amber-500" />
+              <p className="mt-3 text-sm font-semibold text-slate-800">
+                ไม่สามารถโหลด Google Maps ได้
+              </p>
+              <p className="mt-1.5 max-w-md text-xs leading-relaxed text-slate-500">
+                กรุณาตรวจสอบว่า Google Maps API Key เปิดใช้งาน Maps JavaScript API และอนุญาตโดเมนเว็บไซต์นี้ใน HTTP Referrers แล้ว
+              </p>
+              <button
+                type="button"
+                onClick={() => setMapLoadError(false)}
+                className="mt-4 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-100 cursor-pointer"
+              >
+                โหลดแผนที่ใหม่
+              </button>
             </div>
           ) : (
-            <div className="relative h-[540px] w-full lg:h-[620px]">
-              <APIProvider apiKey={apiKey} language="th" region="TH" libraries={['marker']}>
+            <div className="relative h-[440px] w-full sm:h-[540px] lg:h-[620px]">
+              <APIProvider
+                apiKey={apiKey}
+                language="th"
+                region="TH"
+                libraries={['marker']}
+                onError={() => setMapLoadError(true)}
+              >
                 <GoogleMap
                   mapId="DEMO_MAP_ID"
                   defaultCenter={THAILAND_CENTER}
