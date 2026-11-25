@@ -31,6 +31,9 @@ export function HomePage({
         <p className="mt-1.5 font-display text-base font-medium text-slate-600 sm:text-lg">
           &ldquo;งานดี my freelance&rdquo;
         </p>
+        <p className="mt-1.5 font-mono text-xs font-medium text-slate-500 tabular-nums">
+          Revision rev{sourceRevision}
+        </p>
       </section>
 
       {/* Focal Anchor: Compact 3D Circular Button Cluster sized for mobile & desktop */}

@@ -66,7 +66,18 @@ export function AdminLoginModal({
 
     setIsSubmitting(true);
     try {
-      const endpoint = isConfigured === false ? '/api/admin/setup' : '/api/admin/login';
+      let configured = isConfigured;
+      if (configured === null) {
+        const statusRes = await fetch('/api/admin/status').catch(() => null);
+        if (statusRes?.ok) {
+          const statusData = (await statusRes.json().catch(() => ({}))) as { configured?: boolean };
+          configured = Boolean(statusData.configured);
+          setIsConfigured(configured);
+        } else {
+          configured = true;
+        }
+      }
+      const endpoint = configured === false ? '/api/admin/setup' : '/api/admin/login';
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -178,7 +189,7 @@ export function AdminLoginModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || isConfigured === null}
+              disabled={isSubmitting}
               className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? (
