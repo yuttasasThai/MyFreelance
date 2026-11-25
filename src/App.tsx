@@ -47,6 +47,23 @@ export default function App() {
     return () => window.removeEventListener('gmp-quota-exceeded', handleQuotaExceeded);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/revision')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { sourceRevision?: number } | null) => {
+        if (!cancelled && typeof data?.sourceRevision === 'number' && data.sourceRevision >= 1) {
+          setSourceRevision(data.sourceRevision);
+        }
+      })
+      .catch(() => {
+        // Keep default revision if offline
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const loadAdminData = useCallback(async (token: string) => {
     setIsLoading(true);
     try {
