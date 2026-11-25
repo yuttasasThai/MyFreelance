@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Lock, TableProperties, MapPin, Download } from 'lucide-react';
 import { InverterWrenchIcon, SolarCartIcon } from './WorkTypeIcons.tsx';
 import type { AppPage, WorkType } from '../types.ts';
@@ -12,6 +13,9 @@ interface HomePageProps {
   onDownloadSource: () => void;
 }
 
+const ASSEMBLY_BUTTON_IMAGE = '/assets/aistudio/IMG_20261125_133921_2043975d.png';
+const SALES_BUTTON_IMAGE = '/assets/aistudio/IMG_20261125_133935_1b9fcb1b.png';
+
 export function HomePage({
   isAdmin,
   isDownloadingSource,
@@ -21,6 +25,9 @@ export function HomePage({
   onNavigate,
   onDownloadSource,
 }: HomePageProps) {
+  const [assemblyImgError, setAssemblyImgError] = useState(false);
+  const [salesImgError, setSalesImgError] = useState(false);
+
   return (
     <main className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-4xl flex-col items-center justify-center px-3 py-8 sm:px-6">
       {/* Cover Header */}
@@ -36,59 +43,72 @@ export function HomePage({
         </p>
       </section>
 
-      {/* Focal Anchor: Compact 3D Circular Button Cluster sized for mobile & desktop */}
+      {/* Focal Anchor: Two 3D Beveled Image Buttons sized cleanly for mobile & desktop */}
       <section aria-label="ปุ่มเลือกประเภทงาน 3 มิติ" className="mt-8 w-full max-w-xl">
         <div className="orb-3d-stage relative flex items-center justify-center rounded-3xl border border-slate-200 bg-white px-3 py-9 shadow-sm sm:px-10 sm:py-12">
-          {/* Concentric background rings */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden rounded-3xl"
-          >
-            <div className="h-64 w-64 rounded-full border border-slate-200/70 sm:h-80 sm:w-80" />
-            <div className="absolute h-44 w-44 rounded-full border border-dashed border-slate-200 sm:h-56 sm:w-56" />
-          </div>
-
-          <div className="relative z-10 flex flex-row items-center justify-center gap-3.5 sm:gap-10">
-            {/* 1) 3D Circular Button: งานประกอบสินค้า (Hybrid Inverter + ไขควงจิ้มลง) */}
+          <div className="relative z-10 flex flex-row items-center justify-center gap-4 sm:gap-10">
+            {/* 1) 3D Beveled Image Button: งานช่างประกอบ */}
             <button
               type="button"
               onClick={() => onSelectWorkType('assembly')}
-              className="orb-3d-assembly group relative flex h-[156px] w-[156px] flex-col items-center justify-center rounded-full p-2.5 text-center text-white cursor-pointer focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-orange-500 sm:h-54 sm:w-54 sm:p-5"
+              aria-label="งานช่างประกอบ กดกรอกข้อมูล"
+              className="btn-3d-image-assembly group relative flex h-[156px] w-[156px] items-center justify-center rounded-[28px] p-[6px] cursor-pointer focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-blue-600 sm:h-[216px] sm:w-[216px] sm:rounded-[36px] sm:p-[7px]"
             >
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-2 rounded-full border border-white/25 sm:inset-2.5"
-              />
-              <div className="flex h-[74px] w-[74px] items-center justify-center rounded-full bg-white shadow-md ring-2 ring-orange-300/80 transition-transform duration-150 group-hover:scale-105 sm:h-24 sm:w-24">
-                <InverterWrenchIcon className="h-14 w-14 sm:h-[68px] sm:w-[68px]" />
+              <div className="relative h-full w-full overflow-hidden rounded-[22px] bg-blue-600 ring-1 ring-white/50 sm:rounded-[29px]">
+                {!assemblyImgError ? (
+                  <img
+                    src={ASSEMBLY_BUTTON_IMAGE}
+                    alt="งานช่างประกอบ"
+                    referrerPolicy="no-referrer"
+                    onError={() => setAssemblyImgError(true)}
+                    className="h-full w-full object-cover transition-transform duration-150 group-hover:scale-[1.03]"
+                  />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-blue-500 to-blue-800 p-3 text-white">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow">
+                      <InverterWrenchIcon className="h-12 w-12" />
+                    </div>
+                    <span className="mt-2 text-sm font-bold">งานช่างประกอบ</span>
+                  </div>
+                )}
+                {/* Subtle top specular glass sheen for 3D depth */}
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/20 to-transparent"
+                />
               </div>
-              <span className="mt-2 text-[13px] font-bold leading-tight tracking-tight sm:mt-3 sm:text-base">
-                งานประกอบสินค้า
-              </span>
-              <span className="mt-0.5 text-[10px] text-blue-100/95 sm:text-xs">
-                กดกรอกข้อมูล
-              </span>
             </button>
 
-            {/* 2) 3D Circular Button: งานขายสินค้า (รถเข็นมีอุปกรณ์โซลาร์เซลล์) */}
+            {/* 2) 3D Beveled Image Button: งานขาย */}
             <button
               type="button"
               onClick={() => onSelectWorkType('sales')}
-              className="orb-3d-sales group relative flex h-[156px] w-[156px] flex-col items-center justify-center rounded-full p-2.5 text-center text-white cursor-pointer focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-orange-500 sm:h-54 sm:w-54 sm:p-5"
+              aria-label="งานขาย กดกรอกข้อมูล"
+              className="btn-3d-image-sales group relative flex h-[156px] w-[156px] items-center justify-center rounded-[28px] p-[6px] cursor-pointer focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 sm:h-[216px] sm:w-[216px] sm:rounded-[36px] sm:p-[7px]"
             >
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-2 rounded-full border border-white/25 sm:inset-2.5"
-              />
-              <div className="flex h-[74px] w-[74px] items-center justify-center rounded-full bg-white shadow-md ring-2 ring-orange-300/80 transition-transform duration-150 group-hover:scale-105 sm:h-24 sm:w-24">
-                <SolarCartIcon className="h-14 w-14 sm:h-[68px] sm:w-[68px]" />
+              <div className="relative h-full w-full overflow-hidden rounded-[22px] bg-emerald-600 ring-1 ring-white/50 sm:rounded-[29px]">
+                {!salesImgError ? (
+                  <img
+                    src={SALES_BUTTON_IMAGE}
+                    alt="งานขาย"
+                    referrerPolicy="no-referrer"
+                    onError={() => setSalesImgError(true)}
+                    className="h-full w-full object-cover transition-transform duration-150 group-hover:scale-[1.03]"
+                  />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-emerald-500 to-emerald-800 p-3 text-white">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow">
+                      <SolarCartIcon className="h-12 w-12" />
+                    </div>
+                    <span className="mt-2 text-sm font-bold">งานขาย</span>
+                  </div>
+                )}
+                {/* Subtle top specular glass sheen for 3D depth */}
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/20 to-transparent"
+                />
               </div>
-              <span className="mt-2 text-[13px] font-bold leading-tight tracking-tight sm:mt-3 sm:text-base">
-                งานขายสินค้า
-              </span>
-              <span className="mt-0.5 text-[10px] text-emerald-100/95 sm:text-xs">
-                กดกรอกข้อมูล
-              </span>
             </button>
           </div>
         </div>
