@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
-import { resolveThailandCoords, normalizeProvinceName } from '../src/data/thailandProvinces';
+import { resolveThailandCoords, normalizeProvinceName } from '../src/data/thailandProvinces.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -95,17 +95,38 @@ function timingSafeCompareStrings(a: string, b: string): boolean {
   return crypto.timingSafeEqual(hashA, hashB);
 }
 
+function normalizePasscodeSeparators(value: string): string {
+  return value.replace(/[\s-]+/g, '').trim();
+}
+
 function verifyPasscode(candidate: string): boolean {
+  const trimmedCandidate = candidate.trim();
+  const compactCandidate = normalizePasscodeSeparators(trimmedCandidate);
   const envPass = process.env.ADMIN_PASSCODE?.trim();
   if (envPass) {
-    return timingSafeCompareStrings(candidate.trim(), envPass);
+    if (timingSafeCompareStrings(trimmedCandidate, envPass)) {
+      return true;
+    }
+    const compactEnv = normalizePasscodeSeparators(envPass);
+    if (compactEnv.length >= 6 && timingSafeCompareStrings(compactCandidate, compactEnv)) {
+      return true;
+    }
+    return false;
   }
   const stored = readStoredAdminCred();
   if (!stored) return false;
-  const derived = crypto.scryptSync(candidate.trim(), stored.salt, 64);
   const expected = Buffer.from(stored.hash, 'hex');
-  if (derived.length !== expected.length) return false;
-  return crypto.timingSafeEqual(derived, expected);
+  const derivedExact = crypto.scryptSync(trimmedCandidate, stored.salt, 64);
+  if (derivedExact.length === expected.length && crypto.timingSafeEqual(derivedExact, expected)) {
+    return true;
+  }
+  if (compactCandidate && compactCandidate !== trimmedCandidate && compactCandidate.length >= 6) {
+    const derivedCompact = crypto.scryptSync(compactCandidate, stored.salt, 64);
+    if (derivedCompact.length === expected.length && crypto.timingSafeEqual(derivedCompact, expected)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function issueAdminToken(): string {
@@ -420,8 +441,17 @@ export function createApiApp(): express.Express {
     res.json({ apiKey });
   });
 
+  app.get('/api/revision', (_req, res) => {
+    const revState = getOrAdvanceSourceRevision();
+    res.json({ sourceRevision: revState.sourceRevision });
+  });
+
   app.get('/api/admin/status', (_req, res) => {
-    res.json({ configured: isAdminConfigured() });
+    const revState = getOrAdvanceSourceRevision();
+    res.json({
+      configured: isAdminConfigured(),
+      sourceRevision: revState.sourceRevision,
+    });
   });
 
   app.post('/api/admin/setup', (req, res) => {
@@ -430,8 +460,10 @@ export function createApiApp(): express.Express {
       return;
     }
 
-    const passcode = typeof req.body?.passcode === 'string' ? req.body.passcode.trim() : '';
-    if (passcode.length < 4) {
+    const rawPasscode = typeof req.body?.passcode === 'string' ? req.body.passcode.trim() : '';
+    const compactPasscode = normalizePasscodeSeparators(rawPasscode);
+    const passcodeToStore = compactPasscode.length >= 6 ? compactPasscode : rawPasscode;
+    if (passcodeToStore.length < 4) {
       res.status(400).json({ error: 'กรุณากำหนดรหัสผ่านอย่างน้อย 4 ตัวอักษร' });
       return;
     }
@@ -441,7 +473,7 @@ export function createApiApp(): express.Express {
     }
 
     const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.scryptSync(passcode, salt, 64).toString('hex');
+    const hash = crypto.scryptSync(passcodeToStore, salt, 64).toString('hex');
 
     try {
       fs.writeFileSync(
