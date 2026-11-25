@@ -181,7 +181,65 @@ function requireAdmin(
   next();
 }
 
-function ensureStorage(): ServerTeamRecord[] {
+export type StorageMode = 'redis-cloud' | 'local-disk' | 'vercel-tmp';
+
+const REDIS_URL = (
+  process.env.KV_REST_API_URL ||
+  process.env.UPSTASH_REDIS_REST_URL ||
+  ''
+).trim();
+const REDIS_TOKEN = (
+  process.env.KV_REST_API_TOKEN ||
+  process.env.UPSTASH_REDIS_REST_TOKEN ||
+  ''
+).trim();
+const HAS_REDIS_CLOUD = Boolean(REDIS_URL && REDIS_TOKEN);
+
+const REDIS_RECORDS_KEY = 'my-freelance:records:v1';
+const REDIS_REVISION_KEY = 'my-freelance:revision-state:v1';
+
+export function getStorageMode(): StorageMode {
+  if (HAS_REDIS_CLOUD) return 'redis-cloud';
+  return IS_VERCEL ? 'vercel-tmp' : 'local-disk';
+}
+
+async function redisCommand<T = unknown>(args: string[]): Promise<T | null> {
+  if (!HAS_REDIS_CLOUD) return null;
+  const endpoint = REDIS_URL.replace(/\/+$/, '');
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${REDIS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(args),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) {
+    throw new Error(`Redis REST error: ${res.status}`);
+  }
+  const data = (await res.json()) as { result?: T; error?: string };
+  if (data.error) {
+    throw new Error(data.error);
+  }
+  return data.result ?? null;
+}
+
+async function redisGetJson<T>(key: string): Promise<T | null> {
+  try {
+    const raw = await redisCommand<string | null>(['GET', key]);
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function redisSetJson(key: string, value: unknown): Promise<void> {
+  await redisCommand(['SET', key, JSON.stringify(value)]);
+}
+
+function readLocalRecordsSafe(): ServerTeamRecord[] {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
@@ -189,24 +247,53 @@ function ensureStorage(): ServerTeamRecord[] {
     fs.writeFileSync(RECORDS_FILE, JSON.stringify(INITIAL_SEED_RECORDS, null, 2), 'utf-8');
     return [...INITIAL_SEED_RECORDS];
   }
+  const raw = fs.readFileSync(RECORDS_FILE, 'utf-8');
+  if (!raw.trim()) {
+    return [];
+  }
   try {
-    const raw = fs.readFileSync(RECORDS_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed;
+      return parsed as ServerTeamRecord[];
     }
   } catch {
-    // Fallback if file is corrupted
+    // Preserve corrupt file backup instead of wiping existing user data
+    const backupFile = path.join(DATA_DIR, `records.backup-${Date.now()}.json`);
+    try {
+      fs.copyFileSync(RECORDS_FILE, backupFile);
+    } catch {
+      // Ignore backup copy failure
+    }
+    throw new Error('ไม่สามารถอ่านไฟล์ฐานข้อมูลได้ (สำรองไฟล์เดิมไว้แล้ว)');
   }
-  fs.writeFileSync(RECORDS_FILE, JSON.stringify(INITIAL_SEED_RECORDS, null, 2), 'utf-8');
-  return [...INITIAL_SEED_RECORDS];
+  return [];
 }
 
-function saveRecords(records: ServerTeamRecord[]): void {
+async function loadRecords(): Promise<ServerTeamRecord[]> {
+  if (HAS_REDIS_CLOUD) {
+    const remote = await redisGetJson<ServerTeamRecord[]>(REDIS_RECORDS_KEY);
+    if (Array.isArray(remote)) {
+      return remote;
+    }
+    // Bootstrap Redis from local records if available without wiping
+    const localSeed = fs.existsSync(RECORDS_FILE) ? readLocalRecordsSafe() : [...INITIAL_SEED_RECORDS];
+    await redisSetJson(REDIS_RECORDS_KEY, localSeed);
+    return localSeed;
+  }
+  return readLocalRecordsSafe();
+}
+
+async function saveRecords(records: ServerTeamRecord[]): Promise<void> {
+  if (HAS_REDIS_CLOUD) {
+    await redisSetJson(REDIS_RECORDS_KEY, records);
+    return;
+  }
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
-  fs.writeFileSync(RECORDS_FILE, JSON.stringify(records, null, 2), 'utf-8');
+  const tmpFile = `${RECORDS_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(records, null, 2), 'utf-8');
+  fs.renameSync(tmpFile, RECORDS_FILE);
 }
 
 const SAFE_ROOT_FILES = [
@@ -223,6 +310,12 @@ const SAFE_ROOT_FILES = [
 
 const SAFE_SOURCE_DIRS = ['src', 'api', 'lib', 'public'];
 
+function isExcludedZipAsset(relPath: string): boolean {
+  if (relPath === 'api/index.mjs') return true;
+  if (relPath.startsWith('public/assets/aistudio/Screenshot_')) return true;
+  return false;
+}
+
 function collectSourceFiles(relativeDir: string, acc: string[]): void {
   const fullDir = path.resolve(ROOT_DIR, relativeDir);
   if (!fullDir.startsWith(ROOT_DIR + path.sep) || !fs.existsSync(fullDir)) {
@@ -234,7 +327,7 @@ function collectSourceFiles(relativeDir: string, acc: string[]): void {
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
     const relChild = path.posix.join(relativeDir, entry.name);
-    if (relChild === 'api/index.mjs') continue;
+    if (isExcludedZipAsset(relChild)) continue;
     const fullChild = path.resolve(ROOT_DIR, relChild);
     if (!fullChild.startsWith(ROOT_DIR + path.sep)) continue;
 
@@ -284,20 +377,45 @@ function readRootBaseRevision(): number {
   return 1;
 }
 
-function saveRevisionState(state: RevisionState): void {
+async function saveRevisionState(state: RevisionState): Promise<void> {
+  if (HAS_REDIS_CLOUD) {
+    try {
+      await redisSetJson(REDIS_REVISION_KEY, state);
+      return;
+    } catch {
+      // Fallback to local write below
+    }
+  }
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
   fs.writeFileSync(REVISION_STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
 }
 
-function getOrAdvanceSourceRevision(): RevisionState {
+async function getOrAdvanceSourceRevision(): Promise<RevisionState> {
   const currentHash = computeSourceFingerprint();
   const baseRevision = readRootBaseRevision();
   const nowIso = new Date().toISOString();
 
   let state: RevisionState | null = null;
-  if (fs.existsSync(REVISION_STATE_FILE)) {
+  if (HAS_REDIS_CLOUD) {
+    const remoteState = await redisGetJson<Partial<RevisionState>>(REDIS_REVISION_KEY);
+    if (
+      remoteState &&
+      typeof remoteState.sourceRevision === 'number' &&
+      typeof remoteState.dataRevision === 'number' &&
+      typeof remoteState.lastSourceHash === 'string'
+    ) {
+      state = {
+        sourceRevision: Math.max(remoteState.sourceRevision, baseRevision),
+        dataRevision: Math.max(remoteState.dataRevision, 1),
+        lastSourceHash: remoteState.lastSourceHash,
+        updatedAt: typeof remoteState.updatedAt === 'string' ? remoteState.updatedAt : nowIso,
+      };
+    }
+  }
+
+  if (!state && fs.existsSync(REVISION_STATE_FILE)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(REVISION_STATE_FILE, 'utf-8')) as Partial<RevisionState>;
       if (
@@ -324,7 +442,7 @@ function getOrAdvanceSourceRevision(): RevisionState {
       lastSourceHash: currentHash,
       updatedAt: nowIso,
     };
-    saveRevisionState(state);
+    await saveRevisionState(state);
     return state;
   }
 
@@ -335,20 +453,20 @@ function getOrAdvanceSourceRevision(): RevisionState {
       lastSourceHash: currentHash,
       updatedAt: nowIso,
     };
-    saveRevisionState(state);
+    await saveRevisionState(state);
   }
 
   return state;
 }
 
-function bumpDataRevision(): RevisionState {
-  const current = getOrAdvanceSourceRevision();
+async function bumpDataRevision(): Promise<RevisionState> {
+  const current = await getOrAdvanceSourceRevision();
   const next: RevisionState = {
     ...current,
     dataRevision: current.dataRevision + 1,
     updatedAt: new Date().toISOString(),
   };
-  saveRevisionState(next);
+  await saveRevisionState(next);
   return next;
 }
 
@@ -422,6 +540,7 @@ function addSafeDirectoryToZip(zip: JSZip, relativeDir: string): void {
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
     const relChild = path.posix.join(relativeDir, entry.name);
+    if (isExcludedZipAsset(relChild)) continue;
     const fullChild = path.resolve(ROOT_DIR, relChild);
     if (!fullChild.startsWith(ROOT_DIR + path.sep)) continue;
 
@@ -447,16 +566,17 @@ export function createApiApp(): express.Express {
     res.json({ apiKey });
   });
 
-  app.get('/api/revision', (_req, res) => {
-    const revState = getOrAdvanceSourceRevision();
+  app.get('/api/revision', async (_req, res) => {
+    const revState = await getOrAdvanceSourceRevision();
     res.json({ sourceRevision: revState.sourceRevision });
   });
 
-  app.get('/api/admin/status', (_req, res) => {
-    const revState = getOrAdvanceSourceRevision();
+  app.get('/api/admin/status', async (_req, res) => {
+    const revState = await getOrAdvanceSourceRevision();
     res.json({
       configured: isAdminConfigured(),
       sourceRevision: revState.sourceRevision,
+      storageMode: getStorageMode(),
     });
   });
 
@@ -518,18 +638,19 @@ export function createApiApp(): express.Express {
     res.json({ token });
   });
 
-  app.get('/api/admin/revision', requireAdmin, (_req, res) => {
-    const revState = getOrAdvanceSourceRevision();
+  app.get('/api/admin/revision', requireAdmin, async (_req, res) => {
+    const revState = await getOrAdvanceSourceRevision();
     res.json({
       sourceRevision: revState.sourceRevision,
       dataRevision: revState.dataRevision,
       updatedAt: revState.updatedAt,
+      storageMode: getStorageMode(),
     });
   });
 
   app.get('/api/admin/download-source', requireAdmin, async (_req, res) => {
     try {
-      const revState = getOrAdvanceSourceRevision();
+      const revState = await getOrAdvanceSourceRevision();
       const zip = new JSZip();
 
       for (const relFile of SAFE_ROOT_FILES) {
@@ -564,8 +685,9 @@ export function createApiApp(): express.Express {
         '1. แตกไฟล์ ZIP นี้แล้วอัปโหลดขึ้น GitHub หรือใช้ Vercel CLI (npx vercel)',
         '2. Framework Preset: Vite (vercel.json ตั้งค่า buildCommand, outputDirectory และ rewrites ไว้แล้ว)',
         '3. เพิ่ม Environment Variables ใน Vercel Project Settings:',
-        '   - VITE_GOOGLE_MAPS_API_KEY = <Google Maps API Key ของคุณ>',
         '   - ADMIN_PASSCODE = <รหัสผ่าน Admin ที่ต้องการ>',
+        '   - (แนะนำ) เชื่อมต่อ Vercel Storage -> Upstash Redis (ฟรี) เพื่อให้ข้อมูล Admin ไม่หายเมื่อรีสตาร์ท',
+        '   - (ไม่บังคับ) VITE_GOOGLE_MAPS_API_KEY = <Google Maps API Key> (ถ้าไม่ใส่ ระบบจะแสดงแผนที่ 2D ประเทศไทยให้อัตโนมัติ)',
         '4. กด Deploy ได้ทันที',
       ].join('\n');
       zip.file('VERCEL_DEPLOY.txt', deployGuide);
@@ -587,22 +709,114 @@ export function createApiApp(): express.Express {
     }
   });
 
-  app.get('/api/records', requireAdmin, (_req, res) => {
-    const records = ensureStorage();
-    const revState = getOrAdvanceSourceRevision();
+  app.get('/api/records', requireAdmin, async (_req, res) => {
+    try {
+      const records = await loadRecords();
+      const revState = await getOrAdvanceSourceRevision();
+      res.json({
+        records,
+        sourceRevision: revState.sourceRevision,
+        dataRevision: revState.dataRevision,
+        storageMode: getStorageMode(),
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'ไม่สามารถโหลดฐานข้อมูลได้',
+      });
+    }
+  });
+
+  app.delete('/api/records', requireAdmin, async (_req, res) => {
+    await saveRecords([]);
+    const revState = await bumpDataRevision();
     res.json({
-      records,
-      sourceRevision: revState.sourceRevision,
+      success: true,
+      records: [],
       dataRevision: revState.dataRevision,
     });
   });
 
-  app.delete('/api/records', requireAdmin, (_req, res) => {
-    saveRecords([]);
-    const revState = bumpDataRevision();
+  app.post('/api/records/import', requireAdmin, async (req, res) => {
+    const incoming = Array.isArray(req.body?.records) ? req.body.records : null;
+    if (!incoming) {
+      res.status(400).json({ error: 'รูปแบบข้อมูลไม่ถูกต้อง (ต้องเป็นรายการ records)' });
+      return;
+    }
+
+    const existingRecords = await loadRecords();
+    const seenNames = new Set(existingRecords.map((r) => normalizeNameForCompare(r.name)));
+    const seenPhones = new Set(existingRecords.map((r) => normalizePhoneForCompare(r.phone)));
+
+    let addedCount = 0;
+    let skippedCount = 0;
+    const toAppend: ServerTeamRecord[] = [];
+
+    for (const rawItem of incoming) {
+      if (!rawItem || typeof rawItem !== 'object') {
+        skippedCount += 1;
+        continue;
+      }
+      const item = rawItem as Partial<ServerTeamRecord>;
+      const workType = item.workType === 'sales' ? 'sales' : item.workType === 'assembly' ? 'assembly' : null;
+      const name = typeof item.name === 'string' ? item.name.trim() : '';
+      const phone = typeof item.phone === 'string' ? item.phone.trim() : '';
+      const subdistrict = typeof item.subdistrict === 'string' ? item.subdistrict.trim() : '';
+      const district = typeof item.district === 'string' ? item.district.trim() : '';
+      const province = typeof item.province === 'string' ? normalizeProvinceName(item.province) : '';
+
+      if (!workType || !name || !phone || !subdistrict || !district || !province) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const normName = normalizeNameForCompare(name);
+      const normPhone = normalizePhoneForCompare(phone);
+      if ((normName && seenNames.has(normName)) || (normPhone && seenPhones.has(normPhone))) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const hasCoords =
+        typeof item.lat === 'number' &&
+        Number.isFinite(item.lat) &&
+        typeof item.lng === 'number' &&
+        Number.isFinite(item.lng);
+      const coords = hasCoords
+        ? { lat: item.lat!, lng: item.lng! }
+        : resolveThailandCoords(subdistrict, district, province);
+
+      if (normName) seenNames.add(normName);
+      if (normPhone) seenPhones.add(normPhone);
+
+      toAppend.push({
+        id:
+          typeof item.id === 'string' && item.id.trim()
+            ? item.id.trim()
+            : `rec-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        workType,
+        name,
+        phone,
+        subdistrict,
+        district,
+        province,
+        lat: coords.lat,
+        lng: coords.lng,
+        createdAt:
+          typeof item.createdAt === 'string' && item.createdAt.trim()
+            ? item.createdAt.trim()
+            : new Date().toISOString(),
+      });
+      addedCount += 1;
+    }
+
+    const merged = [...toAppend, ...existingRecords];
+    await saveRecords(merged);
+    const revState = addedCount > 0 ? await bumpDataRevision() : await getOrAdvanceSourceRevision();
+
     res.json({
-      success: true,
-      records: [],
+      records: merged,
+      addedCount,
+      skippedCount,
       dataRevision: revState.dataRevision,
     });
   });
@@ -633,7 +847,7 @@ export function createApiApp(): express.Express {
     const cleanDistrict = district.trim();
     const cleanProvince = normalizeProvinceName(province);
 
-    const records = ensureStorage();
+    const records = await loadRecords();
     const normName = normalizeNameForCompare(cleanName);
     const normPhone = normalizePhoneForCompare(cleanPhone);
 
@@ -673,8 +887,8 @@ export function createApiApp(): express.Express {
     };
 
     records.unshift(newRecord);
-    saveRecords(records);
-    const revState = bumpDataRevision();
+    await saveRecords(records);
+    const revState = await bumpDataRevision();
 
     res.status(201).json({
       record: newRecord,
@@ -685,7 +899,7 @@ export function createApiApp(): express.Express {
 
   app.patch('/api/records/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
-    const records = ensureStorage();
+    const records = await loadRecords();
     const idx = records.findIndex((r) => r.id === id);
 
     if (idx === -1) {
@@ -750,22 +964,22 @@ export function createApiApp(): express.Express {
     };
 
     records[idx] = updated;
-    saveRecords(records);
-    const revState = bumpDataRevision();
+    await saveRecords(records);
+    const revState = await bumpDataRevision();
 
     res.json({ record: updated, dataRevision: revState.dataRevision });
   });
 
-  app.delete('/api/records/:id', requireAdmin, (req, res) => {
+  app.delete('/api/records/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
-    const records = ensureStorage();
+    const records = await loadRecords();
     const filtered = records.filter((r) => r.id !== id);
     if (filtered.length === records.length) {
       res.status(404).json({ error: 'ไม่พบข้อมูลรายการนี้' });
       return;
     }
-    saveRecords(filtered);
-    const revState = bumpDataRevision();
+    await saveRecords(filtered);
+    const revState = await bumpDataRevision();
     res.json({ success: true, dataRevision: revState.dataRevision });
   });
 
