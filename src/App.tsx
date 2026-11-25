@@ -6,6 +6,7 @@ import { ExcelDatabasePage } from './components/ExcelDatabasePage.tsx';
 import { SummaryMapPage } from './components/SummaryMapPage.tsx';
 import { RegistrationModal } from './components/RegistrationModal.tsx';
 import { AdminLoginModal } from './components/AdminLoginModal.tsx';
+import { ChangePasscodeModal } from './components/ChangePasscodeModal.tsx';
 import { DuplicateAlertModal } from './components/DuplicateAlertModal.tsx';
 import { exportRecordsToExcel } from './utils/excelExport.ts';
 import type { AppPage, CreateTeamRecordInput, StorageMode, TeamRecord, WorkType } from './types.ts';
@@ -38,6 +39,7 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalWorkType, setModalWorkType] = useState<WorkType>('assembly');
   const [adminModalOpen, setAdminModalOpen] = useState(false);
+  const [changePasscodeOpen, setChangePasscodeOpen] = useState(false);
   const [duplicateAlert, setDuplicateAlert] = useState<{
     open: boolean;
     duplicateBy: 'name' | 'phone' | 'both' | null;
@@ -437,6 +439,7 @@ export default function App() {
           sourceRevision={sourceRevision}
           onSelectWorkType={handleOpenModal}
           onOpenAdminLogin={() => setAdminModalOpen(true)}
+          onOpenChangePasscode={() => setChangePasscodeOpen(true)}
           onNavigate={handleNavigate}
           onDownloadSource={() => void handleDownloadSource()}
         />
@@ -456,6 +459,7 @@ export default function App() {
           onDeleteRecord={handleDeleteRecord}
           onClearAllRecords={handleClearAllRecords}
           onImportRecords={handleImportRecords}
+          onOpenChangePasscode={() => setChangePasscodeOpen(true)}
           onDownloadSource={() => void handleDownloadSource()}
         />
       )}
@@ -484,6 +488,16 @@ export default function App() {
         isOpen={adminModalOpen}
         onClose={() => setAdminModalOpen(false)}
         onAuthenticated={handleAdminAuthenticated}
+      />
+
+      <ChangePasscodeModal
+        isOpen={changePasscodeOpen}
+        adminToken={adminToken}
+        onClose={() => setChangePasscodeOpen(false)}
+        onPasscodeChanged={(newToken) => {
+          setAdminToken(newToken);
+          setToastMessage('บันทึกรหัสผ่าน Admin ใหม่เรียบร้อยแล้ว');
+        }}
       />
 
       <DuplicateAlertModal
