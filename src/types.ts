@@ -38,3 +38,5 @@ export interface AreaGroup {
 }
 
 export type AppPage = 'home' | 'database' | 'map';
+
+export type StorageMode = 'redis-cloud' | 'local-disk' | 'vercel-tmp';

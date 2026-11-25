@@ -8,7 +8,7 @@ import { RegistrationModal } from './components/RegistrationModal.tsx';
 import { AdminLoginModal } from './components/AdminLoginModal.tsx';
 import { DuplicateAlertModal } from './components/DuplicateAlertModal.tsx';
 import { exportRecordsToExcel } from './utils/excelExport.ts';
-import type { AppPage, CreateTeamRecordInput, TeamRecord, WorkType } from './types.ts';
+import type { AppPage, CreateTeamRecordInput, StorageMode, TeamRecord, WorkType } from './types.ts';
 
 function parseFilenameFromDisposition(header: string | null, fallback: string): string {
   if (!header) return fallback;
@@ -22,6 +22,7 @@ export default function App() {
   const [records, setRecords] = useState<TeamRecord[]>([]);
   const [sourceRevision, setSourceRevision] = useState<number>(1);
   const [dataRevision, setDataRevision] = useState<number>(1);
+  const [storageMode, setStorageMode] = useState<StorageMode>('local-disk');
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloadingSource, setIsDownloadingSource] = useState(false);
   const [isClearingRecords, setIsClearingRecords] = useState(false);
@@ -108,6 +109,7 @@ export default function App() {
             records?: TeamRecord[];
             sourceRevision?: number;
             dataRevision?: number;
+            storageMode?: StorageMode;
           };
           if (Array.isArray(data.records)) {
             setRecords(data.records);
@@ -117,6 +119,13 @@ export default function App() {
           }
           if (typeof data.dataRevision === 'number') {
             setDataRevision(data.dataRevision);
+          }
+          if (
+            data.storageMode === 'redis-cloud' ||
+            data.storageMode === 'local-disk' ||
+            data.storageMode === 'vercel-tmp'
+          ) {
+            setStorageMode(data.storageMode);
           }
         }
       } finally {
@@ -295,6 +304,44 @@ export default function App() {
     }
   }, [adminToken]);
 
+  const handleImportRecords = useCallback(
+    async (incoming: unknown[]) => {
+      if (!adminToken) return;
+      const res = await fetch('/api/records/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ records: incoming }),
+      });
+      if (res.status === 401) {
+        setAdminToken(null);
+        return;
+      }
+      if (!res.ok) {
+        setToastMessage('ไม่สามารถนำเข้าข้อมูลสำรองได้');
+        return;
+      }
+      const data = (await res.json()) as {
+        records?: TeamRecord[];
+        addedCount?: number;
+        skippedCount?: number;
+        dataRevision?: number;
+      };
+      if (Array.isArray(data.records)) {
+        setRecords(data.records);
+      }
+      if (typeof data.dataRevision === 'number') {
+        setDataRevision(data.dataRevision);
+      }
+      setToastMessage(
+        `รวมข้อมูลเพิ่ม ${data.addedCount ?? 0} รายการ (ข้ามรายการซ้ำ ${data.skippedCount ?? 0} รายการ)`
+      );
+    },
+    [adminToken]
+  );
+
   const handleExportExcel = useCallback(() => {
     if (!adminToken || records.length === 0) return;
     void exportRecordsToExcel(records, dataRevision);
@@ -403,10 +450,12 @@ export default function App() {
           isClearingRecords={isClearingRecords}
           sourceRevision={sourceRevision}
           dataRevision={dataRevision}
+          storageMode={storageMode}
           onAddNew={handleOpenModal}
           onUpdateRecord={handleUpdateRecord}
           onDeleteRecord={handleDeleteRecord}
           onClearAllRecords={handleClearAllRecords}
+          onImportRecords={handleImportRecords}
           onDownloadSource={() => void handleDownloadSource()}
         />
       )}
