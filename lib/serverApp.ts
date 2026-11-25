@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
-import { resolveThailandCoords, normalizeProvinceName } from '../src/data/thailandProvinces.ts';
+import { resolveThailandCoords, normalizeProvinceName } from '../src/data/thailandProvinces';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
