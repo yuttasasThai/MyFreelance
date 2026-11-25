@@ -1,0 +1,6 @@
+{
+  "name": "ทีมงานอิสระ",
+  "description": "ระบบจัดการงานประกอบสินค้าและงานขายสินค้า ฐานข้อมูลตาราง Excel และแผนที่ปักหมุดสรุปจำนวนแต่ละเขตพื้นที่",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

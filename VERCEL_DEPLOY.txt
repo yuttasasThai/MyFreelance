@@ -1,0 +1,9 @@
+Revision: rev1
+
+วิธีอัปโหลดและ Deploy ขึ้น Vercel:
+1. แตกไฟล์ ZIP นี้แล้วอัปโหลดขึ้น GitHub หรือใช้ Vercel CLI (npx vercel)
+2. Framework Preset: Vite (vercel.json ตั้งค่า buildCommand, outputDirectory และ rewrites ไว้แล้ว)
+3. เพิ่ม Environment Variables ใน Vercel Project Settings:
+   - VITE_GOOGLE_MAPS_API_KEY = <Google Maps API Key ของคุณ>
+   - ADMIN_PASSCODE = <รหัสผ่าน Admin ที่ต้องการ>
+4. กด Deploy ได้ทันที
