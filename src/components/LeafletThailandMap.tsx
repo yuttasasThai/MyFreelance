@@ -53,13 +53,12 @@ export function LeafletThailandMap({
       attributionControl: true,
     });
 
-    // Clean, minimal street/province tiles (CartoDB Voyager with OSM fallback)
+    // Real street/province map tiles (OpenStreetMap primary with Esri World Street fallback)
     const primaryTiles = L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
       {
-        subdomains: 'abcd',
         maxZoom: 18,
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        attribution: '&copy; OpenStreetMap contributors',
       }
     );
 
@@ -67,10 +66,13 @@ export function LeafletThailandMap({
     primaryTiles.on('tileerror', () => {
       if (!fallbackAdded) {
         fallbackAdded = true;
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 18,
-          attribution: '&copy; OpenStreetMap contributors',
-        }).addTo(map);
+        L.tileLayer(
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+          {
+            maxZoom: 18,
+            attribution: 'Tiles &copy; Esri',
+          }
+        ).addTo(map);
       }
     });
 

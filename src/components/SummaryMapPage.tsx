@@ -77,21 +77,16 @@ function AreaPinMarker({
     <AdvancedMarker
       ref={refCallback}
       position={{ lat: group.lat, lng: group.lng }}
-      title={`${group.label} — ${group.totalCount} รายการ`}
+      title={`${group.label} (${group.subLabel}) — ${group.totalCount} งาน`}
       onClick={() => onSelect(group, markerInstance)}
       zIndex={isSelected ? 50 : group.totalCount}
     >
-      <div className="flex flex-col items-center cursor-pointer transition-transform duration-150 hover:scale-110">
-        <div
-          className={`flex h-9 min-w-9 items-center justify-center rounded-full border-2 px-2 font-mono text-xs font-bold text-white shadow-md tabular-nums ${dominantColor} ${
-            isSelected ? 'ring-4 ring-amber-400/70 scale-110' : ''
-          }`}
-        >
-          {group.totalCount}
-        </div>
-        <div className="mt-0.5 max-w-[140px] truncate rounded bg-white/95 px-1.5 py-0.5 text-[10px] font-medium text-slate-800 shadow-xs border border-slate-200">
-          {group.label}
-        </div>
+      <div
+        className={`flex h-9 w-9 items-center justify-center rounded-full border-2 font-mono text-xs font-bold text-white shadow-md tabular-nums cursor-pointer transition-transform duration-150 hover:scale-110 ${dominantColor} ${
+          isSelected ? 'ring-4 ring-amber-400 scale-110' : ''
+        }`}
+      >
+        {group.totalCount}
       </div>
     </AdvancedMarker>
   );
@@ -113,6 +108,10 @@ export function SummaryMapPage({
     setMapLoadError(true);
   }, []);
 
+  useEffect(() => {
+    setMapLoadError(false);
+  }, [apiKey]);
+
   const [cameraTarget, setCameraTarget] = useState<{
     lat: number;
     lng: number;
@@ -130,7 +129,10 @@ export function SummaryMapPage({
   }, [records, filterType]);
 
   const areaGroups = useMemo<AreaGroup[]>(() => {
-    const groups: Record<string, AreaGroup> = {};
+    const groups: Record<
+      string,
+      AreaGroup & { latSum: number; lngSum: number; useProvincePin: boolean }
+    > = {};
 
     for (const rec of filteredRecords) {
       const normProv = normalizeProvinceName(rec.province);
@@ -141,6 +143,7 @@ export function SummaryMapPage({
       let label: string;
       let subLabel: string;
       let coords: { lat: number; lng: number };
+      let useProvincePin = false;
 
       if (groupingLevel === 'province') {
         key = normProv;
@@ -150,16 +153,23 @@ export function SummaryMapPage({
         coords = provMatch
           ? { lat: provMatch.lat, lng: provMatch.lng }
           : { lat: rec.lat, lng: rec.lng };
+        useProvincePin = true;
       } else if (groupingLevel === 'district') {
         key = `${cleanDist}|${normProv}`;
         label = `อ.${cleanDist}`;
         subLabel = `จ.${normProv}`;
-        coords = resolveThailandCoords('', cleanDist, normProv);
+        const hasValidCoords = Number.isFinite(rec.lat) && Number.isFinite(rec.lng);
+        coords = hasValidCoords
+          ? { lat: rec.lat, lng: rec.lng }
+          : resolveThailandCoords('', cleanDist, normProv);
       } else {
         key = `${cleanSub}|${cleanDist}|${normProv}`;
         label = `ต.${cleanSub}`;
         subLabel = `อ.${cleanDist} จ.${normProv}`;
-        coords = { lat: rec.lat, lng: rec.lng };
+        const hasValidCoords = Number.isFinite(rec.lat) && Number.isFinite(rec.lng);
+        coords = hasValidCoords
+          ? { lat: rec.lat, lng: rec.lng }
+          : resolveThailandCoords(cleanSub, cleanDist, normProv);
       }
 
       if (!groups[key]) {
@@ -172,6 +182,9 @@ export function SummaryMapPage({
           subdistrict: groupingLevel === 'subdistrict' ? cleanSub : undefined,
           lat: coords.lat,
           lng: coords.lng,
+          latSum: 0,
+          lngSum: 0,
+          useProvincePin,
           totalCount: 0,
           assemblyCount: 0,
           salesCount: 0,
@@ -180,6 +193,12 @@ export function SummaryMapPage({
       }
 
       groups[key].totalCount += 1;
+      groups[key].latSum += coords.lat;
+      groups[key].lngSum += coords.lng;
+      if (!groups[key].useProvincePin) {
+        groups[key].lat = Number((groups[key].latSum / groups[key].totalCount).toFixed(6));
+        groups[key].lng = Number((groups[key].lngSum / groups[key].totalCount).toFixed(6));
+      }
       if (rec.workType === 'assembly') {
         groups[key].assemblyCount += 1;
       } else {
@@ -188,7 +207,9 @@ export function SummaryMapPage({
       groups[key].records.push(rec);
     }
 
-    return Object.values(groups).sort((a, b) => b.totalCount - a.totalCount);
+    return Object.values(groups)
+      .map(({ latSum: _latSum, lngSum: _lngSum, useProvincePin: _useProv, ...group }) => group)
+      .sort((a, b) => b.totalCount - a.totalCount);
   }, [filteredRecords, groupingLevel]);
 
   const selectedGroup = useMemo(
@@ -380,6 +401,7 @@ export function SummaryMapPage({
           ) : (
             <div className="relative h-[460px] w-full sm:h-[540px] lg:h-[620px]">
               <APIProvider
+                key={apiKey}
                 apiKey={apiKey}
                 language="th"
                 region="TH"
