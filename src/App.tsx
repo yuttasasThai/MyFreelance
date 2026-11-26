@@ -8,6 +8,7 @@ import { RegistrationModal } from './components/RegistrationModal.tsx';
 import { AdminLoginModal } from './components/AdminLoginModal.tsx';
 import { ChangePasscodeModal } from './components/ChangePasscodeModal.tsx';
 import { DuplicateAlertModal } from './components/DuplicateAlertModal.tsx';
+import { BootSplashScreen } from './components/BootSplashScreen.tsx';
 import { exportRecordsToExcel } from './utils/excelExport.ts';
 import type { AppPage, CreateTeamRecordInput, StorageMode, TeamRecord, WorkType } from './types.ts';
 
@@ -18,6 +19,7 @@ function parseFilenameFromDisposition(header: string | null, fallback: string): 
 }
 
 export default function App() {
+  const [showBootScreen, setShowBootScreen] = useState(true);
   const [currentPage, setCurrentPage] = useState<AppPage>('home');
   const [adminToken, setAdminToken] = useState<string | null>(null);
   const [records, setRecords] = useState<TeamRecord[]>([]);
@@ -403,8 +405,14 @@ export default function App() {
     setToastMessage('ออกจากระบบ Admin แล้ว');
   }, []);
 
+  const handleBootComplete = useCallback(() => {
+    setShowBootScreen(false);
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+      {showBootScreen && <BootSplashScreen onComplete={handleBootComplete} durationMs={3400} />}
+
       {quotaExceeded && (
         <div className="sticky top-0 z-50 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-center text-xs text-amber-900 shadow-sm md:text-sm">
           <span>
