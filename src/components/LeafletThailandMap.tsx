@@ -1,18 +1,31 @@
 import { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { RotateCcw, Wrench, ShoppingBag, X } from 'lucide-react';
+import { Wrench, ShoppingBag, X } from 'lucide-react';
 import type { AreaGroup } from '../types.ts';
+
+export type MapTypeOption = 'roadmap' | 'satellite' | 'hybrid' | 'terrain';
+
+export type MapCameraCommand =
+  | { type: 'focus'; lat: number; lng: number; zoom?: number; seq: number }
+  | { type: 'zoomIn'; seq: number }
+  | { type: 'zoomOut'; seq: number }
+  | { type: 'reset'; seq: number }
+  | { type: 'fitAll'; seq: number };
 
 interface LeafletThailandMapProps {
   areaGroups: AreaGroup[];
   selectedKey: string | null;
   onSelectGroup: (group: AreaGroup | null) => void;
-  focusTarget: { lat: number; lng: number; zoom?: number; seq: number } | null;
+  cameraCommand: MapCameraCommand | null;
+  mapType: MapTypeOption;
+  onZoomChange?: (zoom: number) => void;
 }
 
 const THAILAND_CENTER: [number, number] = [13.7563, 100.5018];
 const DEFAULT_ZOOM = 6;
+const MIN_ZOOM = 5;
+const MAX_ZOOM = 17;
 
 function escapeHtml(text: string): string {
   return text
@@ -23,17 +36,76 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
+function buildTileLayersForType(mapType: MapTypeOption): L.TileLayer[] {
+  if (mapType === 'satellite') {
+    return [
+      L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 18,
+          attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics',
+        }
+      ),
+    ];
+  }
+
+  if (mapType === 'hybrid') {
+    const imagery = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {
+        maxZoom: 18,
+        attribution: 'Tiles &copy; Esri',
+      }
+    );
+    const labelsOverlay = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      {
+        maxZoom: 18,
+        attribution: 'Labels &copy; Esri',
+      }
+    );
+    return [imagery, labelsOverlay];
+  }
+
+  if (mapType === 'terrain') {
+    return [
+      L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 18,
+          attribution: 'Tiles &copy; Esri',
+        }
+      ),
+    ];
+  }
+
+  // 'roadmap': OpenStreetMap primary with Esri World Street fallback
+  const primaryTiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; OpenStreetMap contributors',
+  });
+
+  return [primaryTiles];
+}
+
 export function LeafletThailandMap({
   areaGroups,
   selectedKey,
   onSelectGroup,
-  focusTarget,
+  cameraCommand,
+  mapType,
+  onZoomChange,
 }: LeafletThailandMapProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+  const baseLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const onSelectGroupRef = useRef(onSelectGroup);
   onSelectGroupRef.current = onSelectGroup;
+  const onZoomChangeRef = useRef(onZoomChange);
+  onZoomChangeRef.current = onZoomChange;
+  const areaGroupsRef = useRef(areaGroups);
+  areaGroupsRef.current = areaGroups;
 
   const selectedGroup = useMemo(
     () => areaGroups.find((g) => g.key === selectedKey) ?? null,
@@ -47,40 +119,23 @@ export function LeafletThailandMap({
     const map = L.map(container, {
       center: THAILAND_CENTER,
       zoom: DEFAULT_ZOOM,
-      minZoom: 5,
-      maxZoom: 17,
-      zoomControl: true,
+      minZoom: MIN_ZOOM,
+      maxZoom: MAX_ZOOM,
+      zoomControl: false,
       attributionControl: true,
     });
 
-    // Real street/province map tiles (OpenStreetMap primary with Esri World Street fallback)
-    const primaryTiles = L.tileLayer(
-      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      {
-        maxZoom: 18,
-        attribution: '&copy; OpenStreetMap contributors',
-      }
-    );
-
-    let fallbackAdded = false;
-    primaryTiles.on('tileerror', () => {
-      if (!fallbackAdded) {
-        fallbackAdded = true;
-        L.tileLayer(
-          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-          {
-            maxZoom: 18,
-            attribution: 'Tiles &copy; Esri',
-          }
-        ).addTo(map);
-      }
-    });
-
-    primaryTiles.addTo(map);
-
+    const baseLayerGroup = L.layerGroup().addTo(map);
     const markersLayer = L.layerGroup().addTo(map);
     mapInstanceRef.current = map;
+    baseLayerGroupRef.current = baseLayerGroup;
     markersLayerRef.current = markersLayer;
+
+    onZoomChangeRef.current?.(map.getZoom());
+
+    map.on('zoomend', () => {
+      onZoomChangeRef.current?.(map.getZoom());
+    });
 
     map.on('click', () => {
       onSelectGroupRef.current(null);
@@ -95,9 +150,39 @@ export function LeafletThailandMap({
       window.removeEventListener('resize', handleResize);
       map.remove();
       mapInstanceRef.current = null;
+      baseLayerGroupRef.current = null;
       markersLayerRef.current = null;
     };
   }, []);
+
+  // Swap tile layers whenever mapType changes
+  useEffect(() => {
+    const baseLayerGroup = baseLayerGroupRef.current;
+    if (!baseLayerGroup) return;
+
+    baseLayerGroup.clearLayers();
+    const layers = buildTileLayersForType(mapType);
+
+    if (mapType === 'roadmap' && layers[0]) {
+      let fallbackAdded = false;
+      layers[0].on('tileerror', () => {
+        if (!fallbackAdded && baseLayerGroupRef.current === baseLayerGroup) {
+          fallbackAdded = true;
+          L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+            {
+              maxZoom: 18,
+              attribution: 'Tiles &copy; Esri',
+            }
+          ).addTo(baseLayerGroup);
+        }
+      });
+    }
+
+    for (const layer of layers) {
+      layer.addTo(baseLayerGroup);
+    }
+  }, [mapType]);
 
   // Render simple, clean numbered markers on the map
   useEffect(() => {
@@ -138,35 +223,48 @@ export function LeafletThailandMap({
     }
   }, [areaGroups, selectedKey]);
 
-  // Smoothly fly & zoom when selecting from the sidebar list
+  // Execute unified zoom, reset, fit-all, or focus commands
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !focusTarget) return;
-    const targetZoom = Math.min(15, Math.max(8, focusTarget.zoom ?? 11));
-    map.flyTo([focusTarget.lat, focusTarget.lng], targetZoom, { duration: 0.55 });
-  }, [focusTarget]);
+    if (!map || !cameraCommand) return;
 
-  const handleResetView = () => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    onSelectGroup(null);
-    map.setView(THAILAND_CENTER, DEFAULT_ZOOM, { animate: true });
-  };
+    if (cameraCommand.type === 'zoomIn') {
+      map.setZoom(Math.min(MAX_ZOOM, map.getZoom() + 1));
+      return;
+    }
+
+    if (cameraCommand.type === 'zoomOut') {
+      map.setZoom(Math.max(MIN_ZOOM, map.getZoom() - 1));
+      return;
+    }
+
+    if (cameraCommand.type === 'reset') {
+      map.setView(THAILAND_CENTER, DEFAULT_ZOOM, { animate: true });
+      return;
+    }
+
+    if (cameraCommand.type === 'fitAll') {
+      const groups = areaGroupsRef.current;
+      if (groups.length === 0) {
+        map.setView(THAILAND_CENTER, DEFAULT_ZOOM, { animate: true });
+      } else if (groups.length === 1) {
+        map.flyTo([groups[0].lat, groups[0].lng], 11, { duration: 0.5 });
+      } else {
+        const bounds = L.latLngBounds(groups.map((g) => [g.lat, g.lng] as [number, number]));
+        map.fitBounds(bounds, { padding: [56, 56], maxZoom: 13, animate: true });
+      }
+      return;
+    }
+
+    if (cameraCommand.type === 'focus') {
+      const targetZoom = Math.min(15, Math.max(8, cameraCommand.zoom ?? 11));
+      map.flyTo([cameraCommand.lat, cameraCommand.lng], targetZoom, { duration: 0.55 });
+    }
+  }, [cameraCommand]);
 
   return (
-    <div className="relative h-[460px] w-full sm:h-[540px] lg:h-[620px]">
+    <div className="relative h-full w-full">
       <div ref={mapContainerRef} className="z-0 h-full w-full" />
-
-      {/* Top-Right Reset View Button */}
-      <button
-        type="button"
-        onClick={handleResetView}
-        title="รีเซ็ตมุมมองทั้งประเทศ"
-        className="absolute right-3 top-3 z-[400] inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white/95 px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 cursor-pointer"
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-        <span>ทั้งประเทศ</span>
-      </button>
 
       {/* Compact Selected Pin Details Card */}
       {selectedGroup && (

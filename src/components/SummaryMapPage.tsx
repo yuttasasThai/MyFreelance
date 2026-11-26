@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import {
   APIProvider,
   APILoadingStatus,
@@ -6,12 +6,32 @@ import {
   AdvancedMarker,
   InfoWindow,
   useApiLoadingStatus,
+  useAdvancedMarkerRef,
   useMap,
+  useMapsLibrary,
 } from '@vis.gl/react-google-maps';
-import { MapPin, Layers, Wrench, ShoppingBag, Map as MapIcon, Building2 } from 'lucide-react';
+import { MarkerClusterer, type Marker as ClusterMarker } from '@googlemaps/markerclusterer';
+import {
+  MapPin,
+  Layers,
+  Wrench,
+  ShoppingBag,
+  Map as MapIcon,
+  Building2,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Maximize2,
+  Globe,
+  Mountain,
+} from 'lucide-react';
 import type { AreaGroup, TeamRecord, WorkType } from '../types.ts';
 import { THAILAND_PROVINCES, normalizeProvinceName, resolveThailandCoords } from '../data/thailandProvinces.ts';
-import { LeafletThailandMap } from './LeafletThailandMap.tsx';
+import {
+  LeafletThailandMap,
+  type MapCameraCommand,
+  type MapTypeOption,
+} from './LeafletThailandMap.tsx';
 
 interface SummaryMapPageProps {
   records: TeamRecord[];
@@ -25,7 +45,20 @@ type MapEngineMode = 'normal' | 'google';
 type MarkerAnchor = ComponentProps<typeof InfoWindow>['anchor'];
 
 const THAILAND_CENTER = { lat: 13.7563, lng: 100.5018 };
+const MIN_ZOOM = 5;
+const MAX_ZOOM = 17;
 const MAP_LIBRARIES: string[] = ['marker'];
+
+const MAP_TYPE_OPTIONS: {
+  id: MapTypeOption;
+  label: string;
+  icon: typeof MapIcon;
+}[] = [
+  { id: 'roadmap', label: 'ถนน', icon: MapIcon },
+  { id: 'satellite', label: 'ดาวเทียม', icon: Globe },
+  { id: 'hybrid', label: 'ผสม', icon: Layers },
+  { id: 'terrain', label: 'ภูมิประเทศ', icon: Mountain },
+];
 
 function MapLoadingStatusGuard({ onAuthOrLoadFailure }: { onAuthOrLoadFailure: () => void }) {
   const status = useApiLoadingStatus();
@@ -39,14 +72,63 @@ function MapLoadingStatusGuard({ onAuthOrLoadFailure }: { onAuthOrLoadFailure: (
   return null;
 }
 
-function MapCameraController({ target }: { target: { lat: number; lng: number; zoom: number } | null }) {
+function MapCameraController({
+  command,
+  areaGroups,
+}: {
+  command: MapCameraCommand | null;
+  areaGroups: AreaGroup[];
+}) {
   const map = useMap();
 
   useEffect(() => {
-    if (!map || !target) return;
-    map.panTo({ lat: target.lat, lng: target.lng });
-    map.setZoom(target.zoom);
-  }, [map, target]);
+    if (!map || !command) return;
+
+    if (command.type === 'zoomIn') {
+      map.setZoom(Math.min(MAX_ZOOM, (map.getZoom() ?? 6) + 1));
+      return;
+    }
+
+    if (command.type === 'zoomOut') {
+      map.setZoom(Math.max(MIN_ZOOM, (map.getZoom() ?? 6) - 1));
+      return;
+    }
+
+    if (command.type === 'reset') {
+      map.panTo(THAILAND_CENTER);
+      map.setZoom(6);
+      return;
+    }
+
+    if (command.type === 'fitAll') {
+      if (areaGroups.length === 0) {
+        map.panTo(THAILAND_CENTER);
+        map.setZoom(6);
+      } else if (areaGroups.length === 1) {
+        map.panTo({ lat: areaGroups[0].lat, lng: areaGroups[0].lng });
+        map.setZoom(11);
+      } else {
+        let north = -90;
+        let south = 90;
+        let east = -180;
+        let west = 180;
+        for (const group of areaGroups) {
+          if (group.lat > north) north = group.lat;
+          if (group.lat < south) south = group.lat;
+          if (group.lng > east) east = group.lng;
+          if (group.lng < west) west = group.lng;
+        }
+        map.fitBounds({ north, south, east, west }, 56);
+      }
+      return;
+    }
+
+    if (command.type === 'focus') {
+      map.panTo({ lat: command.lat, lng: command.lng });
+      map.setZoom(command.zoom ?? 11);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, command]);
 
   return null;
 }
@@ -55,16 +137,21 @@ function AreaPinMarker({
   group,
   isSelected,
   onSelect,
+  setMarkerRef,
 }: {
   group: AreaGroup;
   isSelected: boolean;
   onSelect: (group: AreaGroup, markerEl: MarkerAnchor) => void;
+  setMarkerRef: (marker: ClusterMarker | null, key: string, totalCount: number) => void;
 }) {
-  const [markerInstance, setMarkerInstance] = useState<MarkerAnchor>(null);
+  const [markerRef, marker] = useAdvancedMarkerRef();
 
-  const refCallback = useCallback((m: MarkerAnchor) => {
-    setMarkerInstance(m);
-  }, []);
+  useEffect(() => {
+    setMarkerRef(marker, group.key, group.totalCount);
+    return () => {
+      setMarkerRef(null, group.key, group.totalCount);
+    };
+  }, [marker, group.key, group.totalCount, setMarkerRef]);
 
   const dominantColor =
     group.assemblyCount > group.salesCount
@@ -75,11 +162,11 @@ function AreaPinMarker({
 
   return (
     <AdvancedMarker
-      ref={refCallback}
+      ref={markerRef}
       position={{ lat: group.lat, lng: group.lng }}
       title={`${group.label} (${group.subLabel}) — ${group.totalCount} งาน`}
-      onClick={() => onSelect(group, markerInstance)}
-      zIndex={isSelected ? 50 : group.totalCount}
+      onClick={() => onSelect(group, marker)}
+      zIndex={isSelected ? 500 : group.totalCount}
     >
       <div
         className={`flex h-9 w-9 items-center justify-center rounded-full border-2 font-mono text-xs font-bold text-white shadow-md tabular-nums cursor-pointer transition-transform duration-150 hover:scale-110 ${dominantColor} ${
@@ -89,6 +176,103 @@ function AreaPinMarker({
         {group.totalCount}
       </div>
     </AdvancedMarker>
+  );
+}
+
+function ClusteredAreaMarkers({
+  areaGroups,
+  selectedKey,
+  onSelect,
+}: {
+  areaGroups: AreaGroup[];
+  selectedKey: string | null;
+  onSelect: (group: AreaGroup, markerEl: MarkerAnchor) => void;
+}) {
+  const map = useMap();
+  const markerLib = useMapsLibrary('marker');
+  const [markers, setMarkers] = useState<Record<string, ClusterMarker>>({});
+  const markerTotalsRef = useRef<WeakMap<ClusterMarker, number>>(new WeakMap());
+
+  const clusterer = useMemo(() => {
+    if (!map || !markerLib) return null;
+    const { AdvancedMarkerElement } = markerLib;
+
+    return new MarkerClusterer({
+      map,
+      renderer: {
+        render: ({ count, position, markers: clusterMarkers }) => {
+          const totalCount = (clusterMarkers ?? []).reduce(
+            (sum, m) => sum + (markerTotalsRef.current.get(m) ?? 1),
+            0
+          );
+          const size = totalCount >= 100 ? 48 : totalCount >= 20 ? 44 : 40;
+          const badge = document.createElement('div');
+          badge.className =
+            'flex items-center justify-center rounded-full border-2 border-white bg-slate-900 font-mono text-xs font-bold text-white shadow-lg tabular-nums cursor-pointer ring-2 ring-slate-900/20';
+          badge.style.width = `${size}px`;
+          badge.style.height = `${size}px`;
+          badge.textContent = String(totalCount);
+
+          const clusterPin = new AdvancedMarkerElement({
+            position,
+            title: `รวม ${totalCount} งาน จาก ${count} พื้นที่ (คลิกเพื่อซูมดู)`,
+            zIndex: 1000 + totalCount,
+          });
+          clusterPin.append(badge);
+          return clusterPin;
+        },
+      },
+    });
+  }, [map, markerLib]);
+
+  const setMarkerRef = useCallback(
+    (marker: ClusterMarker | null, key: string, totalCount: number) => {
+      if (marker) {
+        markerTotalsRef.current.set(marker, totalCount);
+      }
+      setMarkers((prev) => {
+        if (marker) {
+          if (prev[key] === marker) return prev;
+          return { ...prev, [key]: marker };
+        }
+        if (!(key in prev)) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!clusterer) return;
+    clusterer.clearMarkers();
+    const list = Object.values(markers);
+    if (list.length > 0) {
+      clusterer.addMarkers(list);
+    }
+  }, [clusterer, markers, areaGroups]);
+
+  useEffect(() => {
+    return () => {
+      if (clusterer) {
+        clusterer.clearMarkers();
+      }
+    };
+  }, [clusterer]);
+
+  return (
+    <>
+      {areaGroups.map((group) => (
+        <AreaPinMarker
+          key={group.key}
+          group={group}
+          isSelected={selectedKey === group.key}
+          onSelect={onSelect}
+          setMarkerRef={setMarkerRef}
+        />
+      ))}
+    </>
   );
 }
 
@@ -102,7 +286,9 @@ export function SummaryMapPage({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [activeMarker, setActiveMarker] = useState<MarkerAnchor>(null);
   const [mapLoadError, setMapLoadError] = useState(false);
-  const [preferredMode, setPreferredMode] = useState<MapEngineMode>('normal');
+  const [preferredMode, setPreferredMode] = useState<MapEngineMode>('google');
+  const [mapType, setMapType] = useState<MapTypeOption>('roadmap');
+  const [currentZoom, setCurrentZoom] = useState<number>(6);
 
   const handleMapLoadError = useCallback(() => {
     setMapLoadError(true);
@@ -112,12 +298,21 @@ export function SummaryMapPage({
     setMapLoadError(false);
   }, [apiKey]);
 
-  const [cameraTarget, setCameraTarget] = useState<{
-    lat: number;
-    lng: number;
-    zoom: number;
-    seq: number;
-  } | null>(null);
+  const [cameraCommand, setCameraCommand] = useState<MapCameraCommand | null>(null);
+
+  const issueCameraCommand = useCallback(
+    (
+      cmd:
+        | { type: 'focus'; lat: number; lng: number; zoom?: number }
+        | { type: 'zoomIn' | 'zoomOut' | 'reset' | 'fitAll' }
+    ) => {
+      setCameraCommand((prev) => ({
+        ...cmd,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+    },
+    []
+  );
 
   const canUseGoogleMaps = Boolean(apiKey) && !mapLoadError && !isLoadingApiKey;
   const activeEngine: MapEngineMode =
@@ -229,14 +424,14 @@ export function SummaryMapPage({
     (group: AreaGroup) => {
       setSelectedKey(group.key);
       setActiveMarker(null);
-      setCameraTarget((prev) => ({
+      issueCameraCommand({
+        type: 'focus',
         lat: group.lat,
         lng: group.lng,
         zoom: groupingLevel === 'province' ? 8 : groupingLevel === 'district' ? 10 : 12,
-        seq: (prev?.seq ?? 0) + 1,
-      }));
+      });
     },
-    [groupingLevel]
+    [groupingLevel, issueCameraCommand]
   );
 
   return (
@@ -388,111 +583,214 @@ export function SummaryMapPage({
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-stretch">
         {/* Map Viewport (8 cols) */}
         <div className="lg:col-span-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-          {activeEngine === 'normal' ? (
-            <LeafletThailandMap
-              areaGroups={areaGroups}
-              selectedKey={selectedKey}
-              onSelectGroup={(group) => {
-                setSelectedKey(group ? group.key : null);
-                setActiveMarker(null);
-              }}
-              focusTarget={cameraTarget}
-            />
-          ) : (
-            <div className="relative h-[460px] w-full sm:h-[540px] lg:h-[620px]">
-              <APIProvider
-                key={apiKey}
-                apiKey={apiKey}
-                language="th"
-                region="TH"
-                libraries={MAP_LIBRARIES}
-                onError={handleMapLoadError}
-              >
-                <MapLoadingStatusGuard onAuthOrLoadFailure={handleMapLoadError} />
-                <GoogleMap
-                  mapId="DEMO_MAP_ID"
-                  defaultCenter={THAILAND_CENTER}
-                  defaultZoom={6}
-                  gestureHandling="greedy"
-                  internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
-                  className="h-full w-full"
+          <div className="relative h-[460px] w-full sm:h-[540px] lg:h-[620px]">
+            {/* Map Type Selector (Top-Left) */}
+            <div
+              role="group"
+              aria-label="เลือกประเภทแผนที่"
+              className="absolute left-3 top-3 z-[450] inline-flex max-w-[calc(100%-5.25rem)] flex-wrap items-center gap-0.5 rounded-lg border border-slate-300/90 bg-white/95 p-1 shadow-sm backdrop-blur-xs"
+            >
+              {MAP_TYPE_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                const isActive = mapType === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setMapType(option.id)}
+                    aria-pressed={isActive}
+                    className={`inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors cursor-pointer sm:px-2.5 ${
+                      isActive
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span>{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Zoom & Navigation Control Stack (Top-Right) */}
+            <div
+              role="group"
+              aria-label="ควบคุมการซูมและมุมมองแผนที่"
+              className="absolute right-3 top-3 z-[450] flex flex-col gap-2"
+            >
+              <div className="flex flex-col overflow-hidden rounded-lg border border-slate-300/90 bg-white/95 shadow-sm backdrop-blur-xs">
+                <button
+                  type="button"
+                  onClick={() => issueCameraCommand({ type: 'zoomIn' })}
+                  disabled={currentZoom >= MAX_ZOOM}
+                  title="ซูมเข้า"
+                  aria-label="ซูมเข้า"
+                  className="flex h-10 w-10 items-center justify-center text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
                 >
-                  <MapCameraController target={cameraTarget} />
+                  <ZoomIn className="h-4 w-4" />
+                </button>
+                <div
+                  title={`ระดับการซูมปัจจุบัน: ${currentZoom}`}
+                  className="border-y border-slate-200 bg-slate-50/95 py-0.5 text-center font-mono text-[11px] font-semibold text-slate-600 tabular-nums select-none"
+                >
+                  {currentZoom}x
+                </div>
+                <button
+                  type="button"
+                  onClick={() => issueCameraCommand({ type: 'zoomOut' })}
+                  disabled={currentZoom <= MIN_ZOOM}
+                  title="ซูมออก"
+                  aria-label="ซูมออก"
+                  className="flex h-10 w-10 items-center justify-center text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+              </div>
 
-                  {areaGroups.map((group) => (
-                    <AreaPinMarker
-                      key={group.key}
-                      group={group}
-                      isSelected={selectedKey === group.key}
-                      onSelect={handleSelectFromMarker}
-                    />
-                  ))}
-
-                  {selectedGroup && (
-                    <InfoWindow
-                      anchor={activeMarker ?? undefined}
-                      position={
-                        activeMarker
-                          ? undefined
-                          : { lat: selectedGroup.lat, lng: selectedGroup.lng }
-                      }
-                      maxWidth={280}
-                      onCloseClick={() => {
-                        setSelectedKey(null);
-                        setActiveMarker(null);
-                      }}
-                    >
-                      <div className="p-1 text-slate-900">
-                        <div className="text-sm font-bold">{selectedGroup.label}</div>
-                        <div className="text-xs text-slate-500">{selectedGroup.subLabel}</div>
-
-                        <div className="mt-2 flex items-center gap-3 border-y border-slate-200 py-1.5 font-mono text-xs tabular-nums">
-                          <span className="font-bold text-slate-900">
-                            รวม {selectedGroup.totalCount} งาน
-                          </span>
-                          <span className="text-blue-700">
-                            ประกอบ {selectedGroup.assemblyCount}
-                          </span>
-                          <span className="text-emerald-700">
-                            ขาย {selectedGroup.salesCount}
-                          </span>
-                        </div>
-
-                        <ul className="mt-2 max-h-36 space-y-1.5 overflow-y-auto text-xs">
-                          {selectedGroup.records.map((rec) => (
-                            <li key={rec.id} className="flex items-center justify-between gap-2">
-                              <span className="truncate font-medium text-slate-800">
-                                {rec.name}
-                              </span>
-                              <span className="shrink-0 font-mono text-[11px] text-slate-500 tabular-nums">
-                                {rec.phone}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </InfoWindow>
-                  )}
-                </GoogleMap>
-              </APIProvider>
-
-              {/* Map Legend Overlay */}
-              <div className="pointer-events-none absolute bottom-4 left-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-sm backdrop-blur-xs">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-blue-700" />
-                  <span>งานประกอบสินค้าเด่น</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-700" />
-                  <span>งานขายสินค้าเด่น</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-slate-900" />
-                  <span>จำนวนเท่ากัน</span>
-                </span>
+              <div className="flex flex-col overflow-hidden rounded-lg border border-slate-300/90 bg-white/95 shadow-sm backdrop-blur-xs">
+                <button
+                  type="button"
+                  onClick={() => issueCameraCommand({ type: 'fitAll' })}
+                  disabled={areaGroups.length === 0}
+                  title="ปรับมุมมองให้เห็นหมุดทั้งหมด"
+                  aria-label="ปรับมุมมองให้เห็นหมุดทั้งหมด"
+                  className="flex h-10 w-10 items-center justify-center border-b border-slate-200 text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedKey(null);
+                    setActiveMarker(null);
+                    issueCameraCommand({ type: 'reset' });
+                  }}
+                  title="รีเซ็ตมุมมองทั้งประเทศ"
+                  aria-label="รีเซ็ตมุมมองทั้งประเทศ"
+                  className="flex h-10 w-10 items-center justify-center text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200 cursor-pointer"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
               </div>
             </div>
-          )}
+
+            {activeEngine === 'normal' ? (
+              <LeafletThailandMap
+                areaGroups={areaGroups}
+                selectedKey={selectedKey}
+                onSelectGroup={(group) => {
+                  setSelectedKey(group ? group.key : null);
+                  setActiveMarker(null);
+                }}
+                cameraCommand={cameraCommand}
+                mapType={mapType}
+                onZoomChange={setCurrentZoom}
+              />
+            ) : (
+              <div className="relative h-full w-full">
+                <APIProvider
+                  key={apiKey}
+                  apiKey={apiKey}
+                  language="th"
+                  region="TH"
+                  libraries={MAP_LIBRARIES}
+                  onError={handleMapLoadError}
+                >
+                  <MapLoadingStatusGuard onAuthOrLoadFailure={handleMapLoadError} />
+                  <GoogleMap
+                    mapId="DEMO_MAP_ID"
+                    mapTypeId={mapType}
+                    defaultCenter={THAILAND_CENTER}
+                    defaultZoom={6}
+                    minZoom={MIN_ZOOM}
+                    maxZoom={MAX_ZOOM}
+                    zoomControl={false}
+                    mapTypeControl={false}
+                    streetViewControl={false}
+                    fullscreenControl={false}
+                    gestureHandling="greedy"
+                    internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+                    onZoomChanged={(ev) => {
+                      if (Number.isFinite(ev.detail.zoom)) {
+                        setCurrentZoom(Math.round(ev.detail.zoom));
+                      }
+                    }}
+                    className="h-full w-full"
+                  >
+                    <MapCameraController command={cameraCommand} areaGroups={areaGroups} />
+
+                    <ClusteredAreaMarkers
+                      areaGroups={areaGroups}
+                      selectedKey={selectedKey}
+                      onSelect={handleSelectFromMarker}
+                    />
+
+                    {selectedGroup && (
+                      <InfoWindow
+                        anchor={activeMarker ?? undefined}
+                        position={
+                          activeMarker
+                            ? undefined
+                            : { lat: selectedGroup.lat, lng: selectedGroup.lng }
+                        }
+                        maxWidth={280}
+                        onCloseClick={() => {
+                          setSelectedKey(null);
+                          setActiveMarker(null);
+                        }}
+                      >
+                        <div className="p-1 text-slate-900">
+                          <div className="text-sm font-bold">{selectedGroup.label}</div>
+                          <div className="text-xs text-slate-500">{selectedGroup.subLabel}</div>
+
+                          <div className="mt-2 flex items-center gap-3 border-y border-slate-200 py-1.5 font-mono text-xs tabular-nums">
+                            <span className="font-bold text-slate-900">
+                              รวม {selectedGroup.totalCount} งาน
+                            </span>
+                            <span className="text-blue-700">
+                              ประกอบ {selectedGroup.assemblyCount}
+                            </span>
+                            <span className="text-emerald-700">
+                              ขาย {selectedGroup.salesCount}
+                            </span>
+                          </div>
+
+                          <ul className="mt-2 max-h-36 space-y-1.5 overflow-y-auto text-xs">
+                            {selectedGroup.records.map((rec) => (
+                              <li key={rec.id} className="flex items-center justify-between gap-2">
+                                <span className="truncate font-medium text-slate-800">
+                                  {rec.name}
+                                </span>
+                                <span className="shrink-0 font-mono text-[11px] text-slate-500 tabular-nums">
+                                  {rec.phone}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </InfoWindow>
+                    )}
+                  </GoogleMap>
+                </APIProvider>
+
+                {/* Map Legend Overlay */}
+                <div className="pointer-events-none absolute bottom-4 left-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-sm backdrop-blur-xs">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-blue-700" />
+                    <span>งานประกอบสินค้าเด่น</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-700" />
+                    <span>งานขายสินค้าเด่น</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-slate-900" />
+                    <span>จำนวนเท่ากัน</span>
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Area Count Breakdown Panel (4 cols) */}
