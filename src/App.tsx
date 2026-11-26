@@ -411,7 +411,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      {showBootScreen && <BootSplashScreen onComplete={handleBootComplete} durationMs={3400} />}
+      {showBootScreen && <BootSplashScreen onComplete={handleBootComplete} durationMs={4650} />}
 
       {quotaExceeded && (
         <div className="sticky top-0 z-50 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-center text-xs text-amber-900 shadow-sm md:text-sm">

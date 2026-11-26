@@ -181,13 +181,22 @@
     inset 0 3px 6px rgba(5, 46, 22, 0.4);
 }
 
-/* Boot Splash Screen Animations (Left-to-Right Assembly Icon Runner + Typewriter) */
+/* Boot Splash Screen Animations (Opposite-Direction Icon Runners + Typewriter) */
 @keyframes boot-icon-run-ltr {
   0% {
     transform: translateX(0);
   }
   100% {
-    transform: translateX(calc(100% - var(--boot-icon-size, 5rem)));
+    transform: translateX(calc(100% - var(--boot-icon-size, 4.5rem)));
+  }
+}
+
+@keyframes boot-icon-run-rtl {
+  0% {
+    transform: translateX(calc(100% - var(--boot-icon-size, 4.5rem)));
+  }
+  100% {
+    transform: translateX(0);
   }
 }
 
@@ -202,7 +211,7 @@
   }
 }
 
-@keyframes boot-progress-ltr {
+@keyframes boot-progress-fill {
   0% {
     transform: scaleX(0);
   }
@@ -211,14 +220,20 @@
   }
 }
 
-.boot-icon-runner {
-  --boot-icon-size: 5rem;
+.boot-icon-runner-ltr {
+  --boot-icon-size: 4.5rem;
   animation: boot-icon-run-ltr cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+.boot-icon-runner-rtl {
+  --boot-icon-size: 4.5rem;
+  animation: boot-icon-run-rtl cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 @media (min-width: 640px) {
-  .boot-icon-runner {
-    --boot-icon-size: 6rem;
+  .boot-icon-runner-ltr,
+  .boot-icon-runner-rtl {
+    --boot-icon-size: 5.5rem;
   }
 }
 
@@ -226,14 +241,17 @@
   animation: boot-cursor-blink 0.65s steps(1, end) infinite;
 }
 
-.boot-progress-fill-ltr {
-  animation: boot-progress-ltr cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.boot-progress-fill-ltr,
+.boot-progress-fill-rtl {
+  animation: boot-progress-fill cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .boot-icon-runner,
+  .boot-icon-runner-ltr,
+  .boot-icon-runner-rtl,
   .boot-cursor,
-  .boot-progress-fill-ltr {
+  .boot-progress-fill-ltr,
+  .boot-progress-fill-rtl {
     animation: none;
   }
 }
