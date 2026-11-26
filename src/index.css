@@ -181,53 +181,13 @@
     inset 0 3px 6px rgba(5, 46, 22, 0.4);
 }
 
-/* Boot Splash Screen Animations (Right-to-Left Solar Color Chase + Typewriter) */
-@keyframes solar-cell-chase {
-  0%,
-  100% {
-    fill: #1e3a8a;
-  }
-  18% {
-    fill: #0ea5e9;
-  }
-  34% {
-    fill: #10b981;
-  }
-  50% {
-    fill: #f59e0b;
-  }
-  68% {
-    fill: #38bdf8;
-  }
-}
-
-@keyframes solar-beam-sweep-rtl {
+/* Boot Splash Screen Animations (Left-to-Right Assembly Icon Runner + Typewriter) */
+@keyframes boot-icon-run-ltr {
   0% {
-    transform: translateX(195px);
-    opacity: 0;
-  }
-  15% {
-    opacity: 0.95;
-  }
-  85% {
-    opacity: 0.95;
+    transform: translateX(0);
   }
   100% {
-    transform: translateX(-85px);
-    opacity: 0;
-  }
-}
-
-@keyframes solar-node-chase {
-  0%,
-  100% {
-    fill: #334155;
-  }
-  25% {
-    fill: #facc15;
-  }
-  55% {
-    fill: #38bdf8;
+    transform: translateX(calc(100% - var(--boot-icon-size, 5rem)));
   }
 }
 
@@ -242,7 +202,7 @@
   }
 }
 
-@keyframes boot-progress-rtl {
+@keyframes boot-progress-ltr {
   0% {
     transform: scaleX(0);
   }
@@ -251,40 +211,29 @@
   }
 }
 
-.solar-cell-rtl {
-  fill: #1e3a8a;
-  animation: solar-cell-chase 1.35s ease-in-out infinite;
+.boot-icon-runner {
+  --boot-icon-size: 5rem;
+  animation: boot-icon-run-ltr cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.solar-beam-rtl {
-  animation: solar-beam-sweep-rtl 1.35s linear infinite;
-}
-
-.solar-node-rtl {
-  fill: #334155;
-  animation: solar-node-chase 1.35s ease-in-out infinite;
+@media (min-width: 640px) {
+  .boot-icon-runner {
+    --boot-icon-size: 6rem;
+  }
 }
 
 .boot-cursor {
   animation: boot-cursor-blink 0.65s steps(1, end) infinite;
 }
 
-.boot-progress-fill {
-  animation: boot-progress-rtl linear forwards;
+.boot-progress-fill-ltr {
+  animation: boot-progress-ltr cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .solar-cell-rtl,
-  .solar-beam-rtl,
-  .solar-node-rtl,
+  .boot-icon-runner,
   .boot-cursor,
-  .boot-progress-fill {
+  .boot-progress-fill-ltr {
     animation: none;
-  }
-  .solar-cell-rtl {
-    fill: #0284c7;
-  }
-  .solar-beam-rtl {
-    opacity: 0;
   }
 }
