@@ -1,6 +1,6 @@
 {
-  "name": "ทีมงานอิสระ",
-  "description": "ระบบจัดการงานประกอบสินค้าและงานขายสินค้า ฐานข้อมูลตาราง Excel และแผนที่ปักหมุดสรุปจำนวนแต่ละเขตพื้นที่",
+  "name": "EV Care - แจ้งซ่อมรถไฟฟ้าออนไลน์",
+  "description": "โปรแกรมแจ้งซ่อมรถไฟฟ้าออนไลน์แบบเรียลไทม์ พร้อมหน้าแอดมินแจ้งเตือนผ่าน Chrome และตารางประวัติลูกค้าสไตล์ Excel",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
