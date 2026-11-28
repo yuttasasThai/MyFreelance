@@ -12,6 +12,8 @@ import {
   Upload,
   Database,
   KeyRound,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type { StorageMode, TeamRecord, WorkType } from '../types.ts';
 import { exportRecordsToCsv, exportRecordsToExcel } from '../utils/excelExport.ts';
@@ -78,7 +80,46 @@ export function ExcelDatabasePage({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [showAllSensitive, setShowAllSensitive] = useState(false);
+  const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isSensitiveVisible = (id: string) =>
+    showAllSensitive ? revealedIds[id] !== false : Boolean(revealedIds[id]);
+
+  const toggleAllSensitive = () => {
+    setShowAllSensitive((prev) => !prev);
+    setRevealedIds({});
+    setEditingCell((prev) =>
+      prev && (prev.field === 'name' || prev.field === 'phone') ? null : prev
+    );
+  };
+
+  const toggleRowSensitive = (id: string) => {
+    const currentlyVisible = isSensitiveVisible(id);
+    if (currentlyVisible) {
+      setEditingCell((prev) =>
+        prev && prev.id === id && (prev.field === 'name' || prev.field === 'phone') ? null : prev
+      );
+    }
+    setRevealedIds((prev) => {
+      const next = { ...prev };
+      if (showAllSensitive) {
+        if (currentlyVisible) {
+          next[id] = false;
+        } else {
+          delete next[id];
+        }
+      } else {
+        if (currentlyVisible) {
+          delete next[id];
+        } else {
+          next[id] = true;
+        }
+      }
+      return next;
+    });
+  };
 
   const filteredRecords = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -101,8 +142,19 @@ export function ExcelDatabasePage({
   const salesCount = filteredRecords.filter((r) => r.workType === 'sales').length;
 
   const startEdit = (rowIndex: number, rec: TeamRecord, field: EditableField) => {
-    const currentValue = rec[field];
+    const isMaskedField =
+      (field === 'name' || field === 'phone') && !isSensitiveVisible(rec.id);
     const colLetter = COLUMN_LETTERS[field];
+
+    if (isMaskedField) {
+      setSelectedCell({
+        ref: `${colLetter}${rowIndex + 1}`,
+        value: field === 'phone' ? '•••-•••-••••' : '•••••••• (กดปุ่มดวงตาเพื่อดู)',
+      });
+      return;
+    }
+
+    const currentValue = rec[field];
     setSelectedCell({
       ref: `${colLetter}${rowIndex + 1}`,
       value:
@@ -348,15 +400,41 @@ export function ExcelDatabasePage({
           </button>
         </div>
 
-        <div className="relative w-full sm:w-72">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ค้นหาชื่อ, เบอร์โทร, จังหวัด..."
-            className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-          />
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto sm:justify-end">
+          <button
+            type="button"
+            onClick={toggleAllSensitive}
+            aria-pressed={showAllSensitive}
+            title={showAllSensitive ? 'ซ่อนชื่อและเบอร์โทรทั้งหมด' : 'แสดงชื่อและเบอร์โทรทั้งหมด'}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+              showAllSensitive
+                ? 'border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            {showAllSensitive ? (
+              <>
+                <EyeOff className="h-4 w-4 shrink-0" />
+                <span>ซ่อนชื่อ / เบอร์โทร</span>
+              </>
+            ) : (
+              <>
+                <Eye className="h-4 w-4 shrink-0" />
+                <span>ดูชื่อ / เบอร์โทร</span>
+              </>
+            )}
+          </button>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="ค้นหาชื่อ, เบอร์โทร, จังหวัด..."
+              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+            />
+          </div>
         </div>
       </div>
 
@@ -420,8 +498,42 @@ export function ExcelDatabasePage({
                     #
                   </th>
                   <th className="border-r border-slate-200 px-3 py-2.5 whitespace-nowrap">ประเภทงาน</th>
-                  <th className="border-r border-slate-200 px-3 py-2.5 whitespace-nowrap">ชื่อ</th>
-                  <th className="border-r border-slate-200 px-3 py-2.5 whitespace-nowrap">เบอร์โทร</th>
+                  <th className="border-r border-slate-200 px-3 py-2.5 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span>ชื่อ</span>
+                      <button
+                        type="button"
+                        onClick={toggleAllSensitive}
+                        aria-label={showAllSensitive ? 'ซ่อนชื่อทั้งหมด' : 'ดูชื่อทั้งหมด'}
+                        title={showAllSensitive ? 'ซ่อนชื่อและเบอร์โทรทั้งหมด' : 'กดเพื่อดูชื่อและเบอร์โทรทั้งหมด'}
+                        className="inline-flex h-5 w-5 items-center justify-center rounded text-slate-500 hover:bg-slate-200 hover:text-slate-800 cursor-pointer"
+                      >
+                        {showAllSensitive ? (
+                          <EyeOff className="h-3.5 w-3.5" />
+                        ) : (
+                          <Eye className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </span>
+                  </th>
+                  <th className="border-r border-slate-200 px-3 py-2.5 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span>เบอร์โทร</span>
+                      <button
+                        type="button"
+                        onClick={toggleAllSensitive}
+                        aria-label={showAllSensitive ? 'ซ่อนเบอร์โทรทั้งหมด' : 'ดูเบอร์โทรทั้งหมด'}
+                        title={showAllSensitive ? 'ซ่อนชื่อและเบอร์โทรทั้งหมด' : 'กดเพื่อดูชื่อและเบอร์โทรทั้งหมด'}
+                        className="inline-flex h-5 w-5 items-center justify-center rounded text-slate-500 hover:bg-slate-200 hover:text-slate-800 cursor-pointer"
+                      >
+                        {showAllSensitive ? (
+                          <EyeOff className="h-3.5 w-3.5" />
+                        ) : (
+                          <Eye className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </span>
+                  </th>
                   <th className="border-r border-slate-200 px-3 py-2.5 whitespace-nowrap">ตำบล</th>
                   <th className="border-r border-slate-200 px-3 py-2.5 whitespace-nowrap">อำเภอ</th>
                   <th className="border-r border-slate-200 px-3 py-2.5 whitespace-nowrap">จังหวัด</th>
@@ -433,6 +545,7 @@ export function ExcelDatabasePage({
                 {filteredRecords.map((rec, idx) => {
                   const isRowSaving = savingId === rec.id;
                   const isRowDeleting = deletingId === rec.id;
+                  const rowVisible = isSensitiveVisible(rec.id);
 
                   const renderEditableCell = (
                     field: EditableField,
@@ -516,14 +629,29 @@ export function ExcelDatabasePage({
                       );
                     }
 
+                    const isMaskedCell =
+                      (field === 'name' || field === 'phone') && !rowVisible;
+
                     return (
                       <button
                         type="button"
                         onClick={() => startEdit(idx, rec, field)}
-                        title="คลิกเพื่อแก้ไขช่องนี้"
-                        className={`w-full text-left cursor-text hover:underline hover:decoration-slate-300 ${extraClass}`}
+                        title={
+                          isMaskedCell
+                            ? 'ซ่อนอยู่ — กดปุ่มดวงตาเพื่อดูข้อมูล'
+                            : 'คลิกเพื่อแก้ไขช่องนี้'
+                        }
+                        className={`w-full text-left ${
+                          isMaskedCell
+                            ? 'cursor-default tracking-widest text-slate-400 select-none'
+                            : 'cursor-text hover:underline hover:decoration-slate-300'
+                        } ${extraClass}`}
                       >
-                        {displayValue}
+                        {isMaskedCell
+                          ? field === 'phone'
+                            ? '•••-•••-••••'
+                            : '••••••••'
+                          : displayValue}
                       </button>
                     );
                   };
@@ -566,15 +694,41 @@ export function ExcelDatabasePage({
                         {formatDate(rec.createdAt)}
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(rec.id)}
-                          disabled={isRowDeleting}
-                          aria-label={`ลบข้อมูลของ ${rec.name}`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 cursor-pointer"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="inline-flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleRowSensitive(rec.id)}
+                            aria-pressed={rowVisible}
+                            aria-label={
+                              rowVisible
+                                ? `ซ่อนชื่อและเบอร์โทรแถวที่ ${idx + 1}`
+                                : `ดูชื่อและเบอร์โทรแถวที่ ${idx + 1}`
+                            }
+                            title={rowVisible ? 'ซ่อนชื่อและเบอร์โทร' : 'ดูชื่อและเบอร์โทร'}
+                            className={`inline-flex h-7 w-7 items-center justify-center rounded transition-colors cursor-pointer ${
+                              rowVisible
+                                ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                            }`}
+                          >
+                            {rowVisible ? (
+                              <EyeOff className="h-3.5 w-3.5" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDelete(rec.id)}
+                            disabled={isRowDeleting}
+                            aria-label={
+                              rowVisible ? `ลบข้อมูลของ ${rec.name}` : `ลบข้อมูลแถวที่ ${idx + 1}`
+                            }
+                            className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

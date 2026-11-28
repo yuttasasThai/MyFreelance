@@ -1,7 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, CheckCircle2, Loader2 } from 'lucide-react';
 import { InverterWrenchIcon, SolarCartIcon } from './WorkTypeIcons.tsx';
-import { THAILAND_PROVINCES } from '../data/thailandProvinces.ts';
+import { AddressComboField } from './AddressComboField.tsx';
+import {
+  filterDistrictOptions,
+  filterProvinceOptions,
+  filterSubdistrictOptions,
+} from '../data/thaiAddressOptions.ts';
 import type { CreateTeamRecordInput, WorkType } from '../types.ts';
 
 interface RegistrationModalProps {
@@ -25,6 +30,18 @@ export function RegistrationModal({
   const [province, setProvince] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const subdistrictOptions = useMemo(
+    () => filterSubdistrictOptions(province, district, subdistrict, 80),
+    [province, district, subdistrict]
+  );
+
+  const districtOptions = useMemo(
+    () => filterDistrictOptions(province, district, 80),
+    [province, district]
+  );
+
+  const provinceOptions = useMemo(() => filterProvinceOptions(province, 80), [province]);
 
   useEffect(() => {
     if (isOpen) {
@@ -182,58 +199,49 @@ export function RegistrationModal({
             </div>
           </div>
 
-          {/* Address: Tambon, Amphoe, Changwat */}
+          {/* Address: Tambon, Amphoe, Changwat (Filterable dropdown + free typing) */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div>
-              <label htmlFor="field-subdistrict" className="mb-1.5 block text-sm font-medium text-slate-700">
-                ตำบล / แขวง <span className="text-red-600">*</span>
-              </label>
-              <input
-                id="field-subdistrict"
-                type="text"
-                required
-                value={subdistrict}
-                onChange={(e) => setSubdistrict(e.target.value)}
-                placeholder="เช่น สุเทพ"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-              />
-            </div>
+            <AddressComboField
+              id="field-subdistrict"
+              label="ตำบล / แขวง"
+              value={subdistrict}
+              placeholder="พิมพ์หรือเลือกตำบล"
+              required
+              options={subdistrictOptions}
+              onChange={setSubdistrict}
+              onSelectOption={(opt) => {
+                setSubdistrict(opt.subdistrict ?? opt.value);
+                if (opt.district) setDistrict(opt.district);
+                if (opt.province) setProvince(opt.province);
+              }}
+            />
 
-            <div>
-              <label htmlFor="field-district" className="mb-1.5 block text-sm font-medium text-slate-700">
-                อำเภอ / เขต <span className="text-red-600">*</span>
-              </label>
-              <input
-                id="field-district"
-                type="text"
-                required
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-                placeholder="เช่น เมืองเชียงใหม่"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-              />
-            </div>
+            <AddressComboField
+              id="field-district"
+              label="อำเภอ / เขต"
+              value={district}
+              placeholder="พิมพ์หรือเลือกอำเภอ"
+              required
+              options={districtOptions}
+              onChange={setDistrict}
+              onSelectOption={(opt) => {
+                setDistrict(opt.district ?? opt.value);
+                if (opt.province) setProvince(opt.province);
+              }}
+            />
 
-            <div>
-              <label htmlFor="field-province" className="mb-1.5 block text-sm font-medium text-slate-700">
-                จังหวัด <span className="text-red-600">*</span>
-              </label>
-              <input
-                id="field-province"
-                type="text"
-                list="thailand-provinces-list"
-                required
-                value={province}
-                onChange={(e) => setProvince(e.target.value)}
-                placeholder="เช่น เชียงใหม่"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-              />
-              <datalist id="thailand-provinces-list">
-                {THAILAND_PROVINCES.map((p) => (
-                  <option key={p.name} value={p.name} />
-                ))}
-              </datalist>
-            </div>
+            <AddressComboField
+              id="field-province"
+              label="จังหวัด"
+              value={province}
+              placeholder="พิมพ์หรือเลือกจังหวัด"
+              required
+              options={provinceOptions}
+              onChange={setProvince}
+              onSelectOption={(opt) => {
+                setProvince(opt.province ?? opt.value);
+              }}
+            />
           </div>
 
           {errorMsg && (
