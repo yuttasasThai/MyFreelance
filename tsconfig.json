@@ -4,17 +4,15 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
-    "types": ["node", "vite/client", "vite-plugin-pwa/client", "google.maps"],
+    "types": ["vite/client"],
     "lib": [
       "ES2022",
       "DOM",
       "DOM.Iterable"
     ],
     "skipLibCheck": true,
-    "esModuleInterop": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,
-    "resolveJsonModule": true,
     "moduleDetection": "force",
     "allowJs": true,
     "jsx": "react-jsx",

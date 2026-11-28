@@ -1,4 +1,4 @@
-Revision: rev16
+Revision: rev17
 
 วิธีอัปโหลดและ Deploy ขึ้น Vercel:
 1. แตกไฟล์ ZIP นี้แล้วอัปโหลดขึ้น GitHub หรือใช้ Vercel CLI (npx vercel)
